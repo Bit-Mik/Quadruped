@@ -75,6 +75,7 @@ const bool DEBUG_MODE = true;
 const uint8_t PCA9685_ADDR = 0x40;
 const int MIN_SERVO_ANGLE = 0;
 const int MAX_SERVO_ANGLE = 180;
+const float SINGULARITY_MARGIN = 1.0f;  // Safety margin (cm) to prevent full leg extension
 
 // Debug helper macros
 #define DEBUG_PRINT(x) if(DEBUG_MODE) Serial.print(x)
@@ -103,9 +104,11 @@ JointAngles computeIK(float targetX, float targetY) {
 
   float distance = sqrt(targetX * targetX + targetY * targetY);
 
-  // Reachability check
-  if (distance > (UPPER_LEG_LENGTH + LOWER_LEG_LENGTH) || distance < fabsf(UPPER_LEG_LENGTH - LOWER_LEG_LENGTH)) {
-    return result; // unreachable
+  // Reachability check with singularity safety margin
+  // Prevents knee from reaching full extension (singularity dangerous for servos)
+  if (distance > (UPPER_LEG_LENGTH + LOWER_LEG_LENGTH - SINGULARITY_MARGIN) || 
+      distance < fabsf(UPPER_LEG_LENGTH - LOWER_LEG_LENGTH)) {
+    return result; // unreachable or too close to singularity
   }
 
   // ---- Knee angle (b) ----
