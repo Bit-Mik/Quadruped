@@ -36,9 +36,20 @@ LegConfig legs[4] = {
 
 
 
-//CONSTANTS 
+//CONSTANTS & STATE
 float phaseTime = 0;
 unsigned long lastTime = 0;
+bool isGaitRunning = false;
+bool initializationMode = false;  // Disables saturation tracking during startup
+
+// ---- Saturation tracking (for detecting offset misconfiguration) ----
+struct SaturationStats {
+  int hipSaturations[4];
+  int kneeSaturations[4];
+  unsigned int totalSaturationEvents;
+};
+
+SaturationStats satStats = {{0, 0, 0, 0}, {0, 0, 0, 0}, 0};
 const int FREQUENCY = 50;
 const float PERIOD_MS = 1000.0f / FREQUENCY;
 const float CONTROL_DT = 0.01f;
@@ -64,8 +75,6 @@ const bool DEBUG_MODE = true;
 const uint8_t PCA9685_ADDR = 0x40;
 const int MIN_SERVO_ANGLE = 0;
 const int MAX_SERVO_ANGLE = 180;
-const float NEUTRAL_HIP_IK = 0.0f;      // neutral IK position
-const float NEUTRAL_KNEE_IK = 90.0f;    // neutral IK position
 
 // Debug helper macros
 #define DEBUG_PRINT(x) if(DEBUG_MODE) Serial.print(x)
@@ -122,8 +131,8 @@ JointAngles computeIK(float targetX, float targetY) {
   return result;
 }
 
-// Actuator-only: apply computed angles to servos (with safety clamps)
-void applyServos(const JointAngles &angles, LegConfig &leg) {
+// Actuator-only: apply computed angles to servos (with safety clamps & saturation tracking)
+void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex = -1) {
   if (!angles.reachable) return;
 
   float hipIK  = angles.hip;
@@ -144,6 +153,20 @@ void applyServos(const JointAngles &angles, LegConfig &leg) {
       leg.kneeCtrlOffset -
       kneeIK;
 
+  // Track saturation before clamping (only during normal operation, not init)
+  if (!initializationMode) {
+    bool hipSaturated = (hipServo < MIN_SERVO_ANGLE || hipServo > MAX_SERVO_ANGLE);
+    bool kneeSaturated = (kneeServo < MIN_SERVO_ANGLE || kneeServo > MAX_SERVO_ANGLE);
+    
+    if (hipSaturated || kneeSaturated) {
+      satStats.totalSaturationEvents++;
+      if (legIndex >= 0 && legIndex < 4) {
+        if (hipSaturated) satStats.hipSaturations[legIndex]++;
+        if (kneeSaturated) satStats.kneeSaturations[legIndex]++;
+      }
+    }
+  }
+
   hipServo = constrain(hipServo, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
   kneeServo = constrain(kneeServo, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
 
@@ -154,8 +177,8 @@ void applyServos(const JointAngles &angles, LegConfig &leg) {
   DEBUG_PRINT(" | Knee Servo: "); DEBUG_PRINTLN(kneeServo);
 }
 
-//Stepping Function
-void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg)
+// Stepping Function (legIndex passed explicitly to avoid runtime lookup)
+void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg, int legIndex)
 {
   float targetX, targetY;
 
@@ -175,30 +198,97 @@ void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg)
   // Compute IK then apply to servos 
   JointAngles jointAngles = computeIK(targetX, targetY);
   if (jointAngles.reachable) {
-    applyServos(jointAngles, leg);
+    applyServos(jointAngles, leg, legIndex);
   } else {
     DEBUG_PRINTLN("Unreachable target");
   }
 }
 
-// Initialize all servos to neutral/home position
-void initializeServos() {
-  DEBUG_PRINTLN("Initializing servos to neutral position...");
+// Emergency stop: halt all servo motion
+void emergencyStop() {
+  Serial.println("\n!!! EMERGENCY STOP !!!");
+  isGaitRunning = false;
   
-  // Create neutral angles
-  JointAngles neutralAngles;
-  neutralAngles.hip = NEUTRAL_HIP_IK;
-  neutralAngles.knee = NEUTRAL_KNEE_IK;
-  neutralAngles.reachable = true;
-  
-  // Apply neutral position to all legs
-  for (int i = 0; i < 4; i++) {
-    applyServos(neutralAngles, legs[i]);
-    delay(50);  // Small delay between leg updates
+  // Return all legs to neutral
+  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND);
+  if (neutralAngles.reachable) {
+    for (int i = 0; i < 4; i++) {
+      applyServos(neutralAngles, legs[i], i);
+      delay(30);
+    }
   }
   
-  DEBUG_PRINTLN("Servos initialized.");
-  delay(500);  // Wait for servos to settle
+  Serial.println("All servos at neutral. Safe to power down.");
+}
+
+// Report saturation statistics
+void reportSaturationStats() {
+  Serial.println("\n=== Saturation Report ===");
+  Serial.print("Total events: "); Serial.println(satStats.totalSaturationEvents);
+  
+  for (int i = 0; i < 4; i++) {
+    if (satStats.hipSaturations[i] > 0 || satStats.kneeSaturations[i] > 0) {
+      Serial.print("Leg "); Serial.print(i);
+      Serial.print(" - Hip: "); Serial.print(satStats.hipSaturations[i]);
+      Serial.print(" | Knee: "); Serial.println(satStats.kneeSaturations[i]);
+    }
+  }
+  
+  if (satStats.totalSaturationEvents == 0) {
+    Serial.println("No saturation. Offsets tuned well.");
+  } else {
+    Serial.println("WARNING: Review offset values.");
+  }
+}
+
+// Initialize all servos to neutral/home position
+void initializeServos() {
+  Serial.println("\nInitializing servos to standing posture...");
+  initializationMode = true;  // Disable saturation tracking during init
+  
+  // Compute IK for standing position
+  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND);
+  
+  if (!neutralAngles.reachable) {
+    Serial.println("ERROR: Standing posture unreachable!");
+    while (1);
+  }
+  
+  // Log computed angles
+  Serial.print("Neutral IK: Hip="); Serial.print(neutralAngles.hip);
+  Serial.print("° Knee="); Serial.print(neutralAngles.knee);
+  Serial.println("°");
+  
+  // Apply and log actual servo angles
+  Serial.println("Servo initialization:");
+  for (int i = 0; i < 4; i++) {
+    float hipBeforeClamp = legs[i].hipMechOffset + legs[i].hipCtrlOffset +
+                           (legs[i].isLeftSide ? -neutralAngles.hip : neutralAngles.hip);
+    float kneeBeforeClamp = legs[i].kneeMechOffset + legs[i].kneeCtrlOffset - neutralAngles.knee;
+    float hipClamped = constrain(hipBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+    float kneeClamped = constrain(kneeBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+    
+    Serial.print("  Leg "); Serial.print(i);
+    Serial.print(" Hip="); Serial.print(hipClamped); Serial.print("°");
+    if (hipBeforeClamp != hipClamped) Serial.print("[SAT]");
+    Serial.print(" Knee="); Serial.print(kneeClamped); Serial.print("°");
+    if (kneeBeforeClamp != kneeClamped) Serial.print("[SAT]");
+    Serial.println();
+    
+    applyServos(neutralAngles, legs[i], i);
+    delay(50);
+  }
+  
+  Serial.println("Settling...");
+  delay(500);
+  
+  initializationMode = false;  // Resume normal operation
+  // Reset saturation stats (they were disabled during init, but clear for cleanliness)
+  satStats.totalSaturationEvents = 0;
+  for (int i = 0; i < 4; i++) {
+    satStats.hipSaturations[i] = 0;
+    satStats.kneeSaturations[i] = 0;
+  }
 }
 
 void setup() {
@@ -211,7 +301,7 @@ void setup() {
   // Verify I2C device
   if (!i2cDevicePresent(PCA9685_ADDR)) {
     Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
-    while (1); // halt
+    while (1);
   }
   Serial.println("PCA9685 detected.");
 
@@ -219,27 +309,39 @@ void setup() {
   delay(10);
   pwm.setPWMFreq(FREQUENCY);
   
-  // Initialize servos to safe position
+  // Initialize servos
   initializeServos();
   
   lastTime = millis();
-  Serial.println("Quadruped ready. Starting gait.");
+  isGaitRunning = true;
+  Serial.println("Ready. Gait starting...");
 }
 
 void loop() {
+  // Check for serial commands
+  if (Serial.available()) {
+    char cmd = Serial.read();
+    if (cmd == 's' || cmd == 'S') {
+      emergencyStop();
+      reportSaturationStats();
+      return;
+    }
+  }
+  
+  if (!isGaitRunning) return;
+  
   unsigned long now = millis();
   float dt = (now - lastTime) / 1000.0f;
   if (dt < CONTROL_DT) return;   // wait until 10 ms elapsed
-  // lastTime += (unsigned long)(CONTROL_DT * 1000);
   lastTime = now;
 
   phaseTime += dt;
   phaseTime = fmod(phaseTime, 1.0f);
 
-  stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BL]); // Back Left
-  stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FL]); // Front Left
-  stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FR]); // Front Right
-  stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BR]); // Back Right
+  stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BL], LEG_BL);
+  stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FL], LEG_FL);
+  stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FR], LEG_FR);
+  stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BR], LEG_BR);
 }
 
 // Leg frame: m = horizontal (±), n = vertical (↓ negative)
