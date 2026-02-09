@@ -4,57 +4,13 @@
 #include <Wire.h> 
 Adafruit_PWMServoDriver pwm;
 
-//Leg Struct
-struct LegConfig {
-  int hipCh;
-  int kneeCh;
-
-  float hipMechOffset;     // horn calibration (physical truth)
-  float kneeMechOffset;
-
-  float hipCtrlOffset;     // posture / gait bias
-  float kneeCtrlOffset;
-
-  bool isLeftSide;         // mirror symmetry
-};
-
-
-struct JointAngles {
-  float hip;
-  float knee;
-  bool reachable;
-};
-
-LegConfig legs[4] = {
-  // hipCh, kneeCh, hipMech, kneeMech, hipCtrl, kneeCtrl, isLeft
-
-  { 0,  1,  90, 90,  -90,  0, true  },   // Back Left
-  { 4,  5,  90, 90,  -90,  0, true  },   // Front Left
-  { 8,  9,  90, -90,  90, 0, false },   // Back Right
-  {12, 13,  90, -90,  90, 0, false }    // Front RightS
-};
-
-
-
-//CONSTANTS & STATE
-float phaseTime = 0;
-unsigned long lastTime = 0;
-bool isGaitRunning = false;
-bool initializationMode = false;  // Disables saturation tracking during startup
-
-// ---- Saturation tracking (for detecting offset misconfiguration) ----
-struct SaturationStats {
-  int hipSaturations[4];
-  int kneeSaturations[4];
-  unsigned int totalSaturationEvents;
-};
-
-SaturationStats satStats = {{0, 0, 0, 0}, {0, 0, 0, 0}, 0};
+//======================CONFIGURATION======================
 const int FREQUENCY = 50;
 const float PERIOD_MS = 1000.0f / FREQUENCY;
 const float CONTROL_DT = 0.01f;
 const float Y_GROUND = -25.0f;
 const float X_OFFSET = -0.0f;
+const float HIP_FRAME_ROTATION = -90.0f;
 
 // ---- Link lengths (cm or same unit as targetX, targetY) ----
 const float UPPER_LEG_LENGTH = 12.5f;  // upper leg
@@ -81,6 +37,47 @@ const float SINGULARITY_MARGIN = 1.0f;  // Safety margin (cm) to prevent full le
 #define DEBUG_PRINT(x) if(DEBUG_MODE) Serial.print(x)
 #define DEBUG_PRINTLN(x) if(DEBUG_MODE) Serial.println(x)
 
+//Leg Struct
+struct LegConfig {
+  int hipCh;
+  int kneeCh;
+  float hipMechOffset;     // horn calibration (physical truth)
+  float kneeMechOffset;
+  // float hipCtrlOffset;     // posture / gait bias
+  // float kneeCtrlOffset;
+  bool isLeftSide;         // mirror symmetry
+};
+
+struct JointAngles {
+  float hip;
+  float knee;
+  bool reachable;
+};
+
+LegConfig legs[4] = {
+  // hipCh, kneeCh, hipMech, kneeMech, isLeft
+
+  { 0,  1,  90, 90, true },   // Back Left
+  { 4,  5,  90, 90, true },   // Front Left
+  { 8,  9,  90, 90, false },   // Back Right
+  {12, 13,  90, 90, false }    // Front RightS
+};
+
+// ---- Saturation tracking (for detecting offset misconfiguration) ----
+struct SaturationStats {
+  int hipSaturations[4];
+  int kneeSaturations[4];
+  unsigned int totalSaturationEvents;
+};
+SaturationStats satStats = {{0, 0, 0, 0}, {0, 0, 0, 0}, 0};
+
+//CONSTANTS & STATE
+float phaseTime = 0;
+unsigned long lastTime = 0;
+bool isGaitRunning = false;
+bool initializationMode = false;  // Disables saturation tracking during startup
+
+
 // I2C Device Detection
 bool i2cDevicePresent(uint8_t address) {
   Wire.beginTransmission(address);
@@ -89,7 +86,7 @@ bool i2cDevicePresent(uint8_t address) {
 
 int PWM(float angle) {
   // angle = constrain(angle, 0, 180);
-  float pulse = 0.5f + 2 * angle / 180;
+  float pulse = 0.5f + 2.0f * angle / 180;
   int ticks = round(pulse * 4096 / PERIOD_MS);
   // Clamp ticks to valid PCA9685 range
   ticks = constrain(ticks, 0, 4095);
@@ -106,8 +103,7 @@ JointAngles computeIK(float targetX, float targetY) {
 
   // Reachability check with singularity safety margin
   // Prevents knee from reaching full extension (singularity dangerous for servos)
-  if (distance > (UPPER_LEG_LENGTH + LOWER_LEG_LENGTH - SINGULARITY_MARGIN) || 
-      distance < fabsf(UPPER_LEG_LENGTH - LOWER_LEG_LENGTH)) {
+  if (distance > (UPPER_LEG_LENGTH + LOWER_LEG_LENGTH - SINGULARITY_MARGIN) || distance < fabsf(UPPER_LEG_LENGTH - LOWER_LEG_LENGTH)) {
     return result; // unreachable or too close to singularity
   }
 
@@ -148,16 +144,18 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex = -1)
   if (leg.isLeftSide) {
     hipIK = -hipIK;
   }
+  if (!leg.isLeftSide) {
+    kneeIK = -kneeIK;
+  }
+  hipIK += (leg.isLeftSide ? HIP_FRAME_ROTATION : -HIP_FRAME_ROTATION);  // Rotate hip frame to match physical mounting
 
   /* ---------- 3. Map to servo angles ---------- */
   float hipServo =
       leg.hipMechOffset +     // horn alignment (physical truth)
-      leg.hipCtrlOffset +     // posture bias
       hipIK;                  // IK command
 
   float kneeServo =
       leg.kneeMechOffset +    // horn alignment
-      leg.kneeCtrlOffset +    // posture bias
       kneeIK;                 // IK command
 
   /* ---------- 4. Saturation detection (before clamp) ---------- */
@@ -276,9 +274,9 @@ void initializeServos() {
   // Apply and log actual servo angles
   Serial.println("Servo initialization:");
   for (int i = 0; i < 4; i++) {
-    float hipBeforeClamp = legs[i].hipMechOffset + legs[i].hipCtrlOffset +
+    float hipBeforeClamp = legs[i].hipMechOffset +
                            (legs[i].isLeftSide ? -neutralAngles.hip : neutralAngles.hip);
-    float kneeBeforeClamp = legs[i].kneeMechOffset + legs[i].kneeCtrlOffset - neutralAngles.knee;
+    float kneeBeforeClamp = legs[i].kneeMechOffset + - neutralAngles.knee;
     float hipClamped = constrain(hipBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     float kneeClamped = constrain(kneeBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     
@@ -313,11 +311,11 @@ void setup() {
   Serial.println("\n=== Quadruped Startup ===");
   
   // Verify I2C device
-  if (!i2cDevicePresent(PCA9685_ADDR)) {
-    Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
-    while (1);
-  }
-  Serial.println("PCA9685 detected.");
+  // if (!i2cDevicePresent(PCA9685_ADDR)) {
+  //   Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
+  //   while (1);
+  // }
+  // Serial.println("PCA9685 detected.");
 
   pwm.begin();
   delay(10);
