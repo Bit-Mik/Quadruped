@@ -28,10 +28,10 @@ struct JointAngles {
 LegConfig legs[4] = {
   // hipCh, kneeCh, hipMech, kneeMech, hipCtrl, kneeCtrl, isLeft
 
-  { 0,  1,  90, 90,  0,  70, true  },   // Back Left
-  { 4,  5,  90, 90,  0,  70, true  },   // Front Left
-  { 8,  9,  90, 90,  0,  70, false },   // Front Right
-  {12, 13,  90, 90,  0,  70, false }    // Back Right
+  { 0,  1,  90, 90,  -90,  0, true  },   // Back Left
+  { 4,  5,  90, 90,  -90,  0, true  },   // Front Left
+  { 8,  9,  90, -90,  90, 0, false },   // Back Right
+  {12, 13,  90, -90,  90, 0, false }    // Front RightS
 };
 
 
@@ -53,8 +53,8 @@ SaturationStats satStats = {{0, 0, 0, 0}, {0, 0, 0, 0}, 0};
 const int FREQUENCY = 50;
 const float PERIOD_MS = 1000.0f / FREQUENCY;
 const float CONTROL_DT = 0.01f;
-const float Y_GROUND = -25;
-const float X_OFFSET = 0;
+const float Y_GROUND = -25.0f;
+const float X_OFFSET = -0.0f;
 
 // ---- Link lengths (cm or same unit as targetX, targetY) ----
 const float UPPER_LEG_LENGTH = 12.5f;  // upper leg
@@ -67,8 +67,8 @@ const float STEP_HEIGHT = 9.0f;        // lift height during swing phase
 // ---- Leg indices for clarity ----
 const int LEG_BL = 0;  // Back Left
 const int LEG_FL = 1;  // Front Left
-const int LEG_FR = 2;  // Front Right
-const int LEG_BR = 3;  // Back Right
+const int LEG_FR = 3;  // Front Right
+const int LEG_BR = 2;  // Back Right
 
 // ---- Debug & Safety ----
 const bool DEBUG_MODE = true;
@@ -135,50 +135,61 @@ JointAngles computeIK(float targetX, float targetY) {
 }
 
 // Actuator-only: apply computed angles to servos (with safety clamps & saturation tracking)
-void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex = -1) {
+void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex = -1)
+{
   if (!angles.reachable) return;
 
-  float hipIK  = angles.hip;
-  float kneeIK = angles.knee;
+  /* ---------- 1. IK angles (pure math) ---------- */
+  float hipIK  = angles.hip;    // degrees, 0 = neutral
+  float kneeIK = angles.knee;   // degrees, 0 = straight
 
-   // Mirror in IK space
+  /* ---------- 2. Mirror geometry (NOT IK math) ---------- */
+  // Left legs are mirrored mechanically
   if (leg.isLeftSide) {
     hipIK = -hipIK;
   }
 
+  /* ---------- 3. Map to servo angles ---------- */
   float hipServo =
-      leg.hipMechOffset +
-      leg.hipCtrlOffset +
-      hipIK;
+      leg.hipMechOffset +     // horn alignment (physical truth)
+      leg.hipCtrlOffset +     // posture bias
+      hipIK;                  // IK command
 
   float kneeServo =
-      leg.kneeMechOffset +
-      leg.kneeCtrlOffset -
-      kneeIK;
+      leg.kneeMechOffset +    // horn alignment
+      leg.kneeCtrlOffset +    // posture bias
+      kneeIK;                 // IK command
 
-  // Track saturation before clamping (only during normal operation, not init)
-  if (!initializationMode) {
-    bool hipSaturated = (hipServo < MIN_SERVO_ANGLE || hipServo > MAX_SERVO_ANGLE);
-    bool kneeSaturated = (kneeServo < MIN_SERVO_ANGLE || kneeServo > MAX_SERVO_ANGLE);
-    
-    if (hipSaturated || kneeSaturated) {
-      satStats.totalSaturationEvents++;
-      if (legIndex >= 0 && legIndex < 4) {
-        if (hipSaturated) satStats.hipSaturations[legIndex]++;
-        if (kneeSaturated) satStats.kneeSaturations[legIndex]++;
-      }
+  /* ---------- 4. Saturation detection (before clamp) ---------- */
+  bool hipSat  = (hipServo < MIN_SERVO_ANGLE || hipServo > MAX_SERVO_ANGLE);
+  bool kneeSat = (kneeServo < MIN_SERVO_ANGLE || kneeServo > MAX_SERVO_ANGLE);
+
+  if (!initializationMode && (hipSat || kneeSat)) {
+    satStats.totalSaturationEvents++;
+    if (legIndex >= 0 && legIndex < 4) {
+      if (hipSat)  satStats.hipSaturations[legIndex]++;
+      if (kneeSat) satStats.kneeSaturations[legIndex]++;
     }
   }
 
-  hipServo = constrain(hipServo, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+  /* ---------- 5. Clamp for safety ---------- */
+  hipServo  = constrain(hipServo,  MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
   kneeServo = constrain(kneeServo, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
 
+  /* ---------- 6. Send PWM ---------- */
   pwm.setPWM(leg.hipCh,  0, PWM(hipServo));
   pwm.setPWM(leg.kneeCh, 0, PWM(kneeServo));
 
-  DEBUG_PRINT("Hip Servo: "); DEBUG_PRINT(hipServo);
-  DEBUG_PRINT(" | Knee Servo: "); DEBUG_PRINTLN(kneeServo);
+  /* ---------- 7. Debug ---------- */
+  if (DEBUG_MODE) {
+    Serial.print("Leg "); Serial.print(legIndex);
+    Serial.print(" | Hip IK: "); Serial.print(angles.hip);
+    Serial.print(" → Servo: "); Serial.print(hipServo);
+    Serial.print(" | Knee IK: "); Serial.print(angles.knee);
+    Serial.print(" → Servo: "); Serial.println(kneeServo);
+  }
 }
+
 
 // Stepping Function (legIndex passed explicitly to avoid runtime lookup)
 void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg, int legIndex)
@@ -316,7 +327,7 @@ void setup() {
   initializeServos();
   
   lastTime = millis();
-  isGaitRunning = true;
+  isGaitRunning = false;
   Serial.println("Ready. Gait starting...");
 }
 
