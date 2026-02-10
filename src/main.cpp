@@ -8,7 +8,7 @@ Adafruit_PWMServoDriver pwm;
 const int FREQUENCY = 50;
 const float PERIOD_MS = 1000.0f / FREQUENCY;
 const float CONTROL_DT = 0.01f;
-const float Y_GROUND = -25.0f;
+const float Y_GROUND = -20.0f;
 const float X_OFFSET = -0.0f;
 const float HIP_FRAME_ROTATION = -90.0f;
 
@@ -18,7 +18,8 @@ const float LOWER_LEG_LENGTH = 16.3f;  // lower leg
 
 // ---- Gait parameters ----
 const float STEP_LENGTH = 6.0f;        // forward distance per step
-const float STEP_HEIGHT = 9.0f;        // lift height during swing phase
+const float STEP_HEIGHT = 6.0f;        // lift height during swing phase
+float GAIT_CYCLE_DURATION = 3.0f;   // seconds per full gait cycle (adjust for speed)
 
 // ---- Leg indices for clarity ----
 const int LEG_BL = 0;  // Back Left
@@ -276,7 +277,7 @@ void initializeServos() {
   for (int i = 0; i < 4; i++) {
     float hipBeforeClamp = legs[i].hipMechOffset +
                            (legs[i].isLeftSide ? -neutralAngles.hip : neutralAngles.hip);
-    float kneeBeforeClamp = legs[i].kneeMechOffset + - neutralAngles.knee;
+    float kneeBeforeClamp = legs[i].kneeMechOffset - neutralAngles.knee;
     float hipClamped = constrain(hipBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     float kneeClamped = constrain(kneeBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     
@@ -311,11 +312,11 @@ void setup() {
   Serial.println("\n=== Quadruped Startup ===");
   
   // Verify I2C device
-  // if (!i2cDevicePresent(PCA9685_ADDR)) {
-  //   Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
-  //   while (1);
-  // }
-  // Serial.println("PCA9685 detected.");
+  if (!i2cDevicePresent(PCA9685_ADDR)) {
+    Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
+    while (1);
+  }
+  Serial.println("PCA9685 detected.");
 
   pwm.begin();
   delay(10);
@@ -325,7 +326,7 @@ void setup() {
   initializeServos();
   
   lastTime = millis();
-  isGaitRunning = false;
+  isGaitRunning = 1;
   Serial.println("Ready. Gait starting...");
 }
 
@@ -347,13 +348,21 @@ void loop() {
   if (dt < CONTROL_DT) return;   // wait until 10 ms elapsed
   lastTime = now;
 
-  phaseTime += dt;
+  phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);
 
   stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BL], LEG_BL);
   stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FL], LEG_FL);
   stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FR], LEG_FR);
   stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BR], LEG_BR);
+  // pwm.setPWM(0,  0, PWM(90));   // Hip BL
+  // pwm.setPWM(1,  0, PWM(90));   // Knee BL
+  // pwm.setPWM(4,  0, PWM(90));   // Hip FL
+  // pwm.setPWM(5,  0, PWM(90));   // Knee FL
+  // pwm.setPWM(8,  0, PWM(90));   // Hip BR
+  // pwm.setPWM(9,  0, PWM(90));   // Knee BR
+  // pwm.setPWM(12,  0, PWM(90));  // Hip FR
+  // pwm.setPWM(13, 0, PWM(90));   // Knee FR
 }
 
 // Leg frame: m = horizontal (±), n = vertical (↓ negative)
