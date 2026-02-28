@@ -5,8 +5,8 @@
 constexpr int FREQUENCY = 50; //// PWM update frequency for servos (50Hz = standard for analog servos)
 constexpr float PERIOD_MS = 1000.0f / FREQUENCY; // Period of one PWM cycle in milliseconds, Used to convert angle → PCA9685 ticks
 constexpr float CONTROL_DT = 0.01f; // Control loop timestep (seconds). 10 ms control update rate
-constexpr float Y_GROUND = -20.0f;
-constexpr float X_OFFSET = -0.0f;
+constexpr float Y_GROUND = -25.0f; //(-25.0f) Target Y position of foot on the ground (cm)
+constexpr float X_OFFSET = -0.0f; //(0.0f) Forward/backward offset of foot relative to hip in IK coordinate frame (cm)
 constexpr float HIP_FRAME_ROTATION = -90.0f; // Rotates IK coordinate frame to match how hip servo is mounted
 
 // Link lengths (cm or same unit as targetX, targetY)

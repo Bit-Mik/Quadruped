@@ -4,6 +4,12 @@
 
 #include "imu.h"
 
+#ifdef ESP32
+#include <Preferences.h>
+static Preferences g_prefs;
+#endif
+
+// Namespace-private constants, state, and helper functions
 namespace {
 constexpr uint8_t MPU6050_ADDR = 0x68;
 constexpr uint8_t REG_PWR_MGMT_1 = 0x6B;
@@ -11,7 +17,7 @@ constexpr uint8_t REG_ACCEL_XOUT_H = 0x3B;
 
 constexpr float GYRO_SCALE_RAD_PER_SEC =
     (250.0f / 32768.0f) * (PI / 180.0f);  // FS_SEL=0 (250 dps)
-constexpr float RAD_TO_DEG = 180.0f / PI;
+const float IMU_RAD_TO_DEG = 180.0f / PI;  // Avoid collision with Arduino.h macro
 
 constexpr int GYRO_CALIBRATION_SAMPLES = 500;
 constexpr bool CALIBRATE_GYRO_ON_STARTUP = true;
@@ -47,7 +53,7 @@ bool readMpuRaw(int16_t &ax, int16_t &ay, int16_t &az, int16_t &gx, int16_t &gy,
   }
 
   const uint8_t bytesRequested = 14;
-  uint8_t bytesRead = Wire.requestFrom(MPU6050_ADDR, bytesRequested, true);
+  uint8_t bytesRead = Wire.requestFrom(MPU6050_ADDR, bytesRequested, uint8_t(1));
   if (bytesRead != bytesRequested) {
     return false;
   }
@@ -139,9 +145,9 @@ void updateEulerAndRates(float gxDps, float gyDps, float gzDps) {
   float yawRad = -atan2((g_q[1] * g_q[2] + g_q[0] * g_q[3]),
                         0.5f - (g_q[2] * g_q[2] + g_q[3] * g_q[3]));
 
-  g_imuState.rollDeg = rollRad * RAD_TO_DEG;
-  g_imuState.pitchDeg = pitchRad * RAD_TO_DEG;
-  g_imuState.yawDeg = yawRad * RAD_TO_DEG;
+  g_imuState.rollDeg = rollRad * IMU_RAD_TO_DEG;
+  g_imuState.pitchDeg = pitchRad * IMU_RAD_TO_DEG;
+  g_imuState.yawDeg = yawRad * IMU_RAD_TO_DEG;
   if (g_imuState.yawDeg < 0.0f) {
     g_imuState.yawDeg += 360.0f;
   }
@@ -151,6 +157,40 @@ void updateEulerAndRates(float gxDps, float gyDps, float gzDps) {
   g_imuState.yawRateDps = gzDps;
 }
 }  // namespace
+
+void imuSaveCalibration() {
+#ifdef ESP32
+  g_prefs.begin("imu_calib", false);
+  g_prefs.putFloat("gyroX_offset", g_gyroOffsets[0]);
+  g_prefs.putFloat("gyroY_offset", g_gyroOffsets[1]);
+  g_prefs.putFloat("gyroZ_offset", g_gyroOffsets[2]);
+  g_prefs.end();
+  Serial.println("IMU calibration saved to NVS.");
+#endif
+}
+
+void imuLoadCalibration() {
+#ifdef ESP32
+  g_prefs.begin("imu_calib", true);
+  float gxOff = g_prefs.getFloat("gyroX_offset", -999.0f);
+  float gyOff = g_prefs.getFloat("gyroY_offset", -999.0f);
+  float gzOff = g_prefs.getFloat("gyroZ_offset", -999.0f);
+  g_prefs.end();
+
+  if (gxOff > -999.0f && gyOff > -999.0f && gzOff > -999.0f) {
+    g_gyroOffsets[0] = gxOff;
+    g_gyroOffsets[1] = gyOff;
+    g_gyroOffsets[2] = gzOff;
+    g_calibratingGyro = false;  // Skip calibration; use saved offsets
+    Serial.print("IMU calibration loaded from NVS: ");
+    Serial.print(gxOff);
+    Serial.print(", ");
+    Serial.print(gyOff);
+    Serial.print(", ");
+    Serial.println(gzOff);
+  }
+#endif
+}
 
 bool imuInit() {
   imuReset();
@@ -166,6 +206,10 @@ bool imuInit() {
   }
 
   delay(10);
+
+  // Try to load saved calibration from NVS (ESP32 only)
+  imuLoadCalibration();
+
   g_imuState.healthy = true;
   g_imuState.lastUpdateMs = millis();
   return true;
@@ -206,6 +250,9 @@ bool imuUpdate(float dtSeconds) {
       Serial.print(g_gyroOffsets[1]);
       Serial.print(", ");
       Serial.println(g_gyroOffsets[2]);
+
+      // Save calibration to NVS (ESP32 only)
+      imuSaveCalibration();
     }
 
     g_imuState.lastUpdateMs = millis();
@@ -223,9 +270,9 @@ bool imuUpdate(float dtSeconds) {
 
   mahonyUpdate(ax, ay, az, gxRad, gyRad, gzRad, dtSeconds);
 
-  float gxDps = gxRad * RAD_TO_DEG;
-  float gyDps = gyRad * RAD_TO_DEG;
-  float gzDps = gzRad * RAD_TO_DEG;
+  float gxDps = gxRad * IMU_RAD_TO_DEG;
+  float gyDps = gyRad * IMU_RAD_TO_DEG;
+  float gzDps = gzRad * IMU_RAD_TO_DEG;
   updateEulerAndRates(gxDps, gyDps, gzDps);
 
   g_imuState.lastUpdateMs = millis();
@@ -247,7 +294,12 @@ void imuReset() {
   g_gyroSum[1] = 0;
   g_gyroSum[2] = 0;
   g_calibrationCount = 0;
+  // Only calibrate if not already loaded from NVS
+#ifdef ESP32
   g_calibratingGyro = CALIBRATE_GYRO_ON_STARTUP;
+#else
+  g_calibratingGyro = CALIBRATE_GYRO_ON_STARTUP;
+#endif
 
   g_imuState.rollDeg = 0.0f;
   g_imuState.pitchDeg = 0.0f;
