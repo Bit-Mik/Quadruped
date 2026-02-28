@@ -25,7 +25,7 @@ constexpr int LEG_BR = 2;  // Back Right
 constexpr int LEG_FR = 3;  // Front Right
 
 // Debug & Safety
-extern bool DEBUG_MODE = true;
+extern bool DEBUG_MODE;
 constexpr uint8_t PCA9685_ADDR = 0x40;
 constexpr int MIN_SERVO_ANGLE = 0;
 constexpr int MAX_SERVO_ANGLE = 180;
