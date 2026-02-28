@@ -6,6 +6,7 @@
 #include "gait.h"
 #include "globals.h"
 #include "hardware.h"
+#include "imu.h"
 #include "safety.h"
 
 void setup() {
@@ -27,6 +28,12 @@ void setup() {
   pwm.setPWMFreq(FREQUENCY);
 
   initializeServos();
+
+  if (imuInit()) {
+    Serial.println("IMU detected and initialized.");
+  } else {
+    Serial.println("IMU not available yet (running open-loop gait).");
+  }
 
   lastTime = millis();
   DEBUG_MODE = true;
@@ -54,6 +61,8 @@ void loop() {
     return;
   }
   lastTime = now;
+
+  imuUpdate(dt);
 
   phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);

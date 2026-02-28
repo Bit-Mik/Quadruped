@@ -7,6 +7,7 @@ This firmware uses:
 - A phase-shifted walking gait
 - Servo safety clamping + saturation reporting
 - Startup posture initialization + emergency stop from Serial
+- MPU-6050 IMU integration with Mahony AHRS orientation estimation
 
 ## Hardware
 
@@ -85,6 +86,8 @@ The codebase is split by responsibility:
   - Swing/stance trajectory generation for each leg
 - `src/safety.cpp`
   - Servo initialization, emergency stop, saturation reports
+- `src/imu.cpp`
+  - MPU-6050 readout, startup gyro calibration, Mahony AHRS, Euler angle state API
 
 Headers are under `include/`.
 
@@ -129,6 +132,7 @@ Safety mechanisms currently implemented:
 - Power servos from a dedicated supply; do not power multiple servos from Uno 5V.
 - Keep grounds common between Uno and servo power supply.
 - If you see frequent saturation warnings, retune offsets and/or gait targets.
+- IMU implementation expects MPU-6050 at I2C address `0x68` and performs startup gyro calibration over initial samples while the robot is held still.
 
 ## Repository Layout
 
@@ -143,6 +147,7 @@ QUADRUPED/
     servo_control.h
     gait.h
     safety.h
+    imu.h
   src/
     main.cpp
     globals.cpp
@@ -151,5 +156,6 @@ QUADRUPED/
     servo_control.cpp
     gait.cpp
     safety.cpp
+    imu.cpp
   platformio.ini
 ```
