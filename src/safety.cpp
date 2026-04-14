@@ -10,7 +10,7 @@ void emergencyStop() {
   Serial.println("\n!!! EMERGENCY STOP !!!");
   isGaitRunning = false;
 
-  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND);
+  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND, 0.0f);
   if (neutralAngles.reachable) {
     for (int i = 0; i < 4; i++) {
       applyServos(neutralAngles, legs[i], i);
@@ -26,11 +26,14 @@ void reportSaturationStats() {
   Serial.print("Total events: ");
   Serial.println(satStats.totalSaturationEvents);
 
+  const char* legNames[4] = {"BL", "FL", "BR", "FR"};  // Back-Left, Front-Left, Back-Right, Front-Right
+
   for (int i = 0; i < 4; i++) {
-    if (satStats.hipSaturations[i] > 0 || satStats.kneeSaturations[i] > 0) {
-      Serial.print("Leg ");
-      Serial.print(i);
-      Serial.print(" - Hip: ");
+    if (satStats.shoulderSaturations[i] > 0 || satStats.hipSaturations[i] > 0 || satStats.kneeSaturations[i] > 0) {
+      Serial.print(legNames[i]);
+      Serial.print(" - Shoulder: ");
+      Serial.print(satStats.shoulderSaturations[i]);
+      Serial.print(" | Hip: ");
       Serial.print(satStats.hipSaturations[i]);
       Serial.print(" | Knee: ");
       Serial.println(satStats.kneeSaturations[i]);
@@ -48,31 +51,46 @@ void initializeServos() {
   Serial.println("\nInitializing servos to standing posture...");
   initializationMode = true;
 
-  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND);
+  JointAngles neutralAngles = computeIK(X_OFFSET, Y_GROUND, 0.0f);
   if (!neutralAngles.reachable) {
     Serial.println("ERROR: Standing posture unreachable!");
     while (1) {
     }
   }
 
-  Serial.print("Neutral IK: Hip=");
+  Serial.print("Neutral IK: Shoulder=");
+  Serial.print(neutralAngles.shoulder);
+  Serial.print(" deg Hip=");
   Serial.print(neutralAngles.hip);
   Serial.print(" deg Knee=");
   Serial.print(neutralAngles.knee);
   Serial.println(" deg");
 
   Serial.println("Servo initialization:");
+  const char* legNames[4] = {"BL", "FL", "BR", "FR"};  // Back-Left, Front-Left, Back-Right, Front-Right
+  
   for (int i = 0; i < 4; i++) {
+    float shoulderBeforeClamp =
+        legs[i].shoulderMechOffset +
+        (legs[i].isLeftSide ? -neutralAngles.shoulder : neutralAngles.shoulder);
     float hipBeforeClamp =
         legs[i].hipMechOffset +
         (legs[i].isLeftSide ? -neutralAngles.hip : neutralAngles.hip);
     float kneeBeforeClamp = legs[i].kneeMechOffset - neutralAngles.knee;
+    
+    float shoulderClamped = constrain(shoulderBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     float hipClamped = constrain(hipBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
     float kneeClamped =
         constrain(kneeBeforeClamp, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
 
-    Serial.print("  Leg ");
-    Serial.print(i);
+    Serial.print("  ");
+    Serial.print(legNames[i]);
+    Serial.print(" Shoulder=");
+    Serial.print(shoulderClamped);
+    Serial.print(" deg");
+    if (shoulderBeforeClamp != shoulderClamped) {
+      Serial.print("[SAT]");
+    }
     Serial.print(" Hip=");
     Serial.print(hipClamped);
     Serial.print(" deg");
@@ -97,6 +115,7 @@ void initializeServos() {
   initializationMode = false;
   satStats.totalSaturationEvents = 0;
   for (int i = 0; i < 4; i++) {
+    satStats.shoulderSaturations[i] = 0;
     satStats.hipSaturations[i] = 0;
     satStats.kneeSaturations[i] = 0;
   }

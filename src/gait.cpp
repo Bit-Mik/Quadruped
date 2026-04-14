@@ -20,7 +20,8 @@ void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg,
     targetY = yGround;
   }
 
-  JointAngles jointAngles = computeIK(targetX, targetY);
+  // Pass the phase to IK for shoulder movement
+  JointAngles jointAngles = computeIK(targetX, targetY, phase);
   if (jointAngles.reachable) {
     applyServos(jointAngles, leg, legIndex);
   } else {

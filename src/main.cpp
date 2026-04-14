@@ -8,6 +8,7 @@
 #include "hardware.h"
 #include "imu.h"
 #include "safety.h"
+#include "servo_manual.h"
 
 #ifdef ESP32
 #include "freertos/FreeRTOS.h"
@@ -67,16 +68,27 @@ void setup() {
   lastTime = millis();
   DEBUG_MODE = true;
   isGaitRunning = false;
-  Serial.println("Ready. Gait starting...");
+  Serial.println("Ready. Type HELP for manual servo control commands.");
+  printManualControlHelp();
 }
 
 void loop() {
+  // Handle serial commands
   if (Serial.available()) {
-    char cmd = Serial.read();
-    if (cmd == 's' || cmd == 'S') {
-      emergencyStop();
-      reportSaturationStats();
-      return;
+    char c = Serial.read();
+    static String command = "";
+    
+    // Echo incoming character
+    Serial.write(c);
+    
+    if (c == '\n' || c == '\r') {
+      if (command.length() > 0) {
+        Serial.println();  // New line after command
+        handleSerialCommand(command);
+      }
+      command = "";
+    } else if (c >= 32 && c <= 126) {  // Printable ASCII only
+      command += c;
     }
   }
 

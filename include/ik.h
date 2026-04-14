@@ -2,4 +2,4 @@
 
 #include "robot_types.h"
 
-JointAngles computeIK(float targetX, float targetY);
+JointAngles computeIK(float targetX, float targetY, float gaitPhase = 0.0f);

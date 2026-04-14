@@ -5,17 +5,19 @@
 constexpr int FREQUENCY = 50; //// PWM update frequency for servos (50Hz = standard for analog servos)
 constexpr float PERIOD_MS = 1000.0f / FREQUENCY; // Period of one PWM cycle in milliseconds, Used to convert angle → PCA9685 ticks
 constexpr float CONTROL_DT = 0.01f; // Control loop timestep (seconds). 10 ms control update rate
-constexpr float Y_GROUND = -25.0f; //(-25.0f) Target Y position of foot on the ground (cm)
+constexpr float Y_GROUND = -20.0f; // Target Y position of foot on the ground (cm) - within max reach (~22.5cm)
 constexpr float X_OFFSET = -0.0f; //(0.0f) Forward/backward offset of foot relative to hip in IK coordinate frame (cm)
 constexpr float HIP_FRAME_ROTATION = -90.0f; // Rotates IK coordinate frame to match how hip servo is mounted
 
 // Link lengths (cm or same unit as targetX, targetY)
-constexpr float UPPER_LEG_LENGTH = 12.5f; // Length of upper leg (hip → knee) in cm
-constexpr float LOWER_LEG_LENGTH = 16.3f; // Length of lower leg (knee → foot) in cm
+constexpr float SHOULDER_LENGTH = 5.0f;   // Offset from hip to shoulder servo pivot (cm)
+constexpr float UPPER_LEG_LENGTH = 11.0f; // Length of upper leg (hip → knee) in cm
+constexpr float LOWER_LEG_LENGTH = 12.5f; // Length of lower leg (knee → foot) in cm
 
 // Gait parameters
 constexpr float STEP_LENGTH = 6.0f;
 constexpr float STEP_HEIGHT = 6.0f;
+constexpr float SHOULDER_AMPLITUDE = 15.0f;  // Max shoulder abduction/adduction angle (degrees)
 extern float GAIT_CYCLE_DURATION;  // seconds per full gait cycle
 
 // Leg indices for clarity
