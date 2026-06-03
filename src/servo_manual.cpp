@@ -3,6 +3,8 @@
 #include "config.h"
 #include "globals.h"
 #include "hardware.h"
+#include "ik.h"
+#include "servo_control.h"
 
 // Track current servo angles (0-14 for 15 total servos)
 static float currentServoAngles[15] = {
@@ -15,12 +17,18 @@ void printManualControlHelp() {
   Serial.println("  4=FL Shoulder  5=FL Hip     6=FL Knee");
   Serial.println("  8=BR Shoulder  9=BR Hip    10=BR Knee");
   Serial.println(" 12=BL Shoulder 13=BL Hip    14=BL Knee");
-  Serial.println("Commands:");
+  Serial.println("\nDirect Servo Commands:");
   Serial.println("  S<n>=<angle>   : Set servo N to angle (0-180°). Ex: S0=90");
   Serial.println("  S<n>?          : Get current angle of servo N. Ex: S0?");
   Serial.println("  ALL=<angle>    : Set ALL servos to angle (0-180°)");
   Serial.println("  HOME           : Set all servos to 90°");
   Serial.println("  STATUS         : Show all current servo angles");
+  Serial.println("\nLeg IK Commands (Move leg to coordinates):");
+  Serial.println("  FR=<x>,<y>,<z> : Move Front-Right leg to X,Y,Z (cm). Ex: FR=0,0,-19");
+  Serial.println("  FL=<x>,<y>,<z> : Move Front-Left leg to X,Y,Z (cm)");
+  Serial.println("  BR=<x>,<y>,<z> : Move Back-Right leg to X,Y,Z (cm)");
+  Serial.println("  BL=<x>,<y>,<z> : Move Back-Left leg to X,Y,Z (cm)");
+  Serial.println("\nGait Commands:");
   Serial.println("  G              : Start gait");
   Serial.println("  STOP           : Stop gait / Emergency stop");
   Serial.println("  HELP           : Show this help message");
@@ -38,8 +46,8 @@ void setServoManual(int servoIndex, float angle) {
   angle = constrain(angle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
   currentServoAngles[servoIndex] = angle;
 
-  // Apply to PCA9685
-  pwm.setPWM(servoIndex, 0, PWM(angle));
+  // Apply to PCA9685 with automatic offset compensation
+  setServoAngleWithOffset(servoIndex, angle);
 
   Serial.print("Servo ");
   Serial.print(servoIndex);
@@ -53,6 +61,34 @@ float getServoAngle(int servoIndex) {
     return -1.0f;
   }
   return currentServoAngles[servoIndex];
+}
+
+void setLegPosition(int legIndex, float targetX, float targetY, float targetZ) {
+  if (legIndex < 0 || legIndex > 3) {
+    Serial.println("ERROR: Invalid leg index");
+    return;
+  }
+
+  // Compute IK for the target position
+  JointAngles angles = computeIK(targetX, targetY, targetZ, 0.0f);
+  
+  if (!angles.reachable) {
+    Serial.println("ERROR: Target position unreachable");
+    return;
+  }
+
+  // Apply the angles to the leg
+  applyServos(angles, legs[legIndex], legIndex);
+
+  const char* legNames[4] = {"FR", "FL", "BR", "BL"};  // Matches legs[] array order
+  Serial.print(legNames[legIndex]);
+  Serial.print(" moved to X=");
+  Serial.print(targetX);
+  Serial.print(" cm, Y=");
+  Serial.print(targetY);
+  Serial.print(" cm, Z=");
+  Serial.print(targetZ);
+  Serial.println(" cm");
 }
 
 void handleSerialCommand(String command) {
@@ -187,6 +223,46 @@ void handleSerialCommand(String command) {
 
     for (int i = 0; i < 15; i++) {
       setServoManual(i, angle);
+    }
+    return;
+  }
+
+  // Parse leg IK commands: FR=x,y,z or FL=x,y,z or BR=x,y,z or BL=x,y,z
+  if (command.startsWith("FR=") || command.startsWith("FL=") || 
+      command.startsWith("BR=") || command.startsWith("BL=")) {
+    
+    String legName = command.substring(0, 2);
+    String coordStr = command.substring(3);
+    
+    // Parse X,Y,Z coordinates
+    int comma1 = coordStr.indexOf(',');
+    int comma2 = coordStr.indexOf(',', comma1 + 1);
+    
+    if (comma1 < 0 || comma2 < 0) {
+      Serial.println("ERROR: Use LEG=x,y,z format. Ex: FR=0,0,-19");
+      return;
+    }
+    
+    String xStr = coordStr.substring(0, comma1);
+    String yStr = coordStr.substring(comma1 + 1, comma2);
+    String zStr = coordStr.substring(comma2 + 1);
+    
+    xStr.trim();
+    yStr.trim();
+    zStr.trim();
+    
+    float targetX = xStr.toFloat();
+    float targetY = yStr.toFloat();
+    float targetZ = zStr.toFloat();
+    
+    int legIndex = -1;
+    if (legName == "FR") legIndex = LEG_FR;
+    else if (legName == "FL") legIndex = LEG_FL;
+    else if (legName == "BR") legIndex = LEG_BR;
+    else if (legName == "BL") legIndex = LEG_BL;
+    
+    if (legIndex >= 0) {
+      setLegPosition(legIndex, targetX, targetY, targetZ);
     }
     return;
   }

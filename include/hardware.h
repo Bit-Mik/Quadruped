@@ -4,3 +4,4 @@
 
 bool i2cDevicePresent(uint8_t address);
 int PWM(float angle);
+void setServoAngleWithOffset(int servoIndex, float angle);

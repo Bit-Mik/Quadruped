@@ -14,22 +14,18 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
   float hipIK = angles.hip;
   float kneeIK = angles.knee;
 
-  // Apply left/right side transformations
-  if (leg.isLeftSide) {
-    shoulderIK = -shoulderIK;  // Mirror shoulder for left side
-    hipIK = -hipIK;             // Mirror hip for left side
-  }
   if (!leg.isLeftSide) {
-    kneeIK = -kneeIK;           // Mirror knee for right side
+    kneeIK = 180 - kneeIK;           // Mirror knee for right side
+    hipIK = - hipIK;           // Mirror hip for right side 
+    // shoulderIK = 180 - shoulderIK; // Mirror shoulder for right side
   }
-
-  // Apply mechanical frame rotations
-  shoulderIK += (leg.isLeftSide ? HIP_FRAME_ROTATION : -HIP_FRAME_ROTATION);
-  hipIK += (leg.isLeftSide ? HIP_FRAME_ROTATION : -HIP_FRAME_ROTATION);
+  if(legIndex == 0 || legIndex == 3) { // FR and BL legs need shoulder mirroring due to mounting orientation
+    shoulderIK = 180 - shoulderIK;
+  }
 
   // Apply mechanical offsets
   float shoulderServo = leg.sOffset + shoulderIK;
-  float hipServo = leg.hOffset + hipIK;
+  float hipServo = leg.hOffset + hipIK + 90.0f; // Add 90° to hip to match servo's neutral position
   float kneeServo = leg.kOffset + kneeIK;
 
   // Check saturation
