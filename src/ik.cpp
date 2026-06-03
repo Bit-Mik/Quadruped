@@ -6,12 +6,12 @@
 // 3-Link IK solver for shoulder->hip->knee chain
 // targetX, targetY: desired foot position in local leg frame
 // gaitPhase: normalized phase (0.0-1.0) for synchronized shoulder movement
-JointAngles computeIK(float targetX, float targetY, float gaitPhase) {
+JointAngles computeIK(float targetX, float targetZ, float gaitPhase) {
   JointAngles result;
   result.reachable = false;
 
   // Compute 3D distance from hip (center of rotation)
-  float distance = sqrt(targetX * targetX + targetY * targetY);
+  float distance = sqrt(targetX * targetX + targetZ * targetZ);
 
   // Check reachability for 2-link hip-knee chain
   // Shoulder only affects horizontal offset, not reach
@@ -22,7 +22,7 @@ JointAngles computeIK(float targetX, float targetY, float gaitPhase) {
 
   // Calculate knee angle using law of cosines
   float cosBeta =
-      (targetX * targetX + targetY * targetY -
+      (targetX * targetX + targetZ * targetZ -
        UPPER_LEG_LENGTH * UPPER_LEG_LENGTH -
        LOWER_LEG_LENGTH * LOWER_LEG_LENGTH) /
       (2 * UPPER_LEG_LENGTH * LOWER_LEG_LENGTH);
@@ -31,7 +31,7 @@ JointAngles computeIK(float targetX, float targetY, float gaitPhase) {
 
   // Calculate hip angle
   float hipAngleRad =
-      atan2(targetY, targetX) -
+      atan2(targetZ, targetX) -
       atan2(LOWER_LEG_LENGTH * sin(kneeAngleRad),
             UPPER_LEG_LENGTH + LOWER_LEG_LENGTH * cos(kneeAngleRad));
 

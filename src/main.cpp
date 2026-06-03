@@ -34,20 +34,21 @@ void setup() {
 #else
   Wire.begin();
 #endif
-  delay(100);
+  delay(500);  // Wait for I2C to stabilize
 
   Serial.println("\n=== Quadruped Startup ===");
 
-  // if (!i2cDevicePresent(PCA9685_ADDR)) {
-  //   Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
-  //   while (1) {
-  //   }
-  // }
+  if (!i2cDevicePresent(PCA9685_ADDR)) {
+    Serial.println("ERROR: PCA9685 not found at 0x" + String(PCA9685_ADDR, HEX));
+    while (1) {
+    }
+  }
   Serial.println("PCA9685 detected.");
 
   pwm.begin();
-  delay(10);
+  delay(50);  // Ensure PCA9685 has time to initialize
   pwm.setPWMFreq(FREQUENCY);
+  delay(50);  // Wait for frequency to be applied
 
   initializeServos();
 
@@ -111,8 +112,8 @@ void loop() {
   phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);
 
-  stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BL], LEG_BL);
-  stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FL], LEG_FL);
-  stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_FR], LEG_FR);
-  stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Y_GROUND, legs[LEG_BR], LEG_BR);
+  stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_BL], LEG_BL);
+  stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_FL], LEG_FL);
+  stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_FR], LEG_FR);
+  stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_BR], LEG_BR);
 }

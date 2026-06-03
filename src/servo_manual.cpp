@@ -10,11 +10,11 @@ static float currentServoAngles[15] = {
 
 void printManualControlHelp() {
   Serial.println("\n=== Manual Servo Control Help ===");
-  Serial.println("Channel mapping: BL(0,1,2) BR(4,5,6) FL(8,9,10) FR(12,13,14)");
-  Serial.println("  0=BL Shoulder  1=BL Hip     2=BL Knee");
-  Serial.println("  4=BR Shoulder  5=BR Hip     6=BR Knee");
-  Serial.println("  8=FL Shoulder  9=FL Hip    10=FL Knee");
-  Serial.println(" 12=FR Shoulder 13=FR Hip    14=FR Knee");
+  Serial.println("Channel mapping: FR(0,1,2) FL(4,5,6) BR(8,9,10) BL(12,13,14)");
+  Serial.println("  0=FR Shoulder  1=FR Hip     2=FR Knee");
+  Serial.println("  4=FL Shoulder  5=FL Hip     6=FL Knee");
+  Serial.println("  8=BR Shoulder  9=BR Hip    10=BR Knee");
+  Serial.println(" 12=BL Shoulder 13=BL Hip    14=BL Knee");
   Serial.println("Commands:");
   Serial.println("  S<n>=<angle>   : Set servo N to angle (0-180°). Ex: S0=90");
   Serial.println("  S<n>?          : Get current angle of servo N. Ex: S0?");

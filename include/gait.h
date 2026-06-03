@@ -2,4 +2,4 @@
 
 #include "robot_types.h"
 
-void stepLeg(float phase, float xOffset, float yGround, LegConfig &leg, int legIndex);
+void stepLeg(float phase, float xOffset, float zGround, LegConfig &leg, int legIndex);

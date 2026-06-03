@@ -28,9 +28,9 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
   hipIK += (leg.isLeftSide ? HIP_FRAME_ROTATION : -HIP_FRAME_ROTATION);
 
   // Apply mechanical offsets
-  float shoulderServo = leg.shoulderMechOffset + shoulderIK;
-  float hipServo = leg.hipMechOffset + hipIK;
-  float kneeServo = leg.kneeMechOffset + kneeIK;
+  float shoulderServo = leg.sOffset + shoulderIK;
+  float hipServo = leg.hOffset + hipIK;
+  float kneeServo = leg.kOffset + kneeIK;
 
   // Check saturation
   bool shoulderSat = (shoulderServo < MIN_SERVO_ANGLE || shoulderServo > MAX_SERVO_ANGLE);
@@ -63,7 +63,7 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
   pwm.setPWM(leg.kneeCh, 0, PWM(kneeServo));
 
   if (DEBUG_MODE) {
-    const char* legNames[4] = {"BL", "FL", "BR", "FR"};
+    const char* legNames[4] = {"FR", "FL", "BR", "BL"};
     
     if (legIndex >= 0 && legIndex < 4) {
       Serial.print(legNames[legIndex]);

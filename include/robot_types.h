@@ -4,9 +4,9 @@ struct LegConfig {
   int shoulderCh;
   int hipCh;
   int kneeCh;
-  float shoulderMechOffset;
-  float hipMechOffset;
-  float kneeMechOffset;
+  float sOffset; //shoulder offset relative to hip in IK coordinate frame (cm)
+  float hOffset; //hip offset relative to shoulder in IK coordinate frame (cm)
+  float kOffset; //knee offset relative to hip in IK coordinate frame (cm)
   bool isLeftSide;
 };
 
