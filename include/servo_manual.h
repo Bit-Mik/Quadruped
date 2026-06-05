@@ -20,4 +20,4 @@ void printManualControlHelp();
 void handleSerialCommand(String command);
 void setServoManual(int servoIndex, float angle);
 float getServoAngle(int servoIndex);
-void setLegPosition(int legIndex, float targetX, float targetZ);
+void setLegPosition(int legIndex, float targetX,float targetY,float targetZ);

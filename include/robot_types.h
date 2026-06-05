@@ -23,3 +23,11 @@ struct SaturationStats {
   int kneeSaturations[4];
   unsigned int totalSaturationEvents;
 };
+
+struct FootPos
+{
+    float x;
+    float y;
+    float z;
+};
+

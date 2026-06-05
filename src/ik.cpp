@@ -19,11 +19,11 @@
 //   targetY: lateral distance from shoulder (cm)
 //   targetZ: vertical position, ground reference (cm, typically -19)
 //   gaitPhase: normalized cycle phase (0.0-1.0) for shoulder oscillation
-JointAngles computeIK(float X, float Y, float Z, float gaitPhase) {
+JointAngles computeIK(float X, float Y, float Z) {
   JointAngles result;
   result.reachable = false;
-  Y+=SHOULDER_LENGTH;
-  X+=SHOULDER_WIDTH;
+  // Y+=SHOULDER_LENGTH;
+  // X+=SHOULDER_WIDTH;
 
   // ===== STAGE 1: REACHABILITY CHECK =====
   
@@ -32,6 +32,14 @@ JointAngles computeIK(float X, float Y, float Z, float gaitPhase) {
   float yzPlanarReach = sqrt(Y * Y + Z * Z);
   // X-Z plane: hip-knee reach in forward-vertical direction
   float xzPlanarReach = sqrt(X * X + Z * Z);
+  if(xzPlanarReach > UPPER_LEG_LENGTH + LOWER_LEG_LENGTH)
+{
+    return result;
+}
+if(xzPlanarReach < fabsf(UPPER_LEG_LENGTH - LOWER_LEG_LENGTH))
+{
+    return result;
+}
 
   // Account for shoulder servo mechanical offset
   // The hip-knee chain must reach from shoulder pivot to foot, minus shoulder offset
@@ -47,31 +55,33 @@ JointAngles computeIK(float X, float Y, float Z, float gaitPhase) {
   // ===== STAGE 2: SHOULDER ANGLE (Y-Z PLANE) =====
   
   // Angle from vertical (Z-axis) to foot in lateral plane
-  float beta1 = atan(Y / Z);
+  float beta1 = atan2(Y,-Z);
   
   // Shoulder mechanical offset angle in Y-Z plane
-  float beta2 = atan(SHOULDER_WIDTH / yzPlanarReach);
+  float beta2 = atan2(SHOULDER_WIDTH, yzPlanarReach);
   
   // Shoulder servo angle = 90° minus combined angles
-  float theta1 = PI/2 - (beta1 + beta2); // Shoulder angle in Y-Z plane
-
+  // float theta1 = PI/2 - (beta1 + beta2); // Shoulder angle in Y-Z plane
+  float theta1 = beta1 + PI/2; // Shoulder angle in Y-Z plane (alternative convention)
   // ===== STAGE 3: HIP-KNEE ANGLES (X-Z PLANE) =====
   
   // Angle from vertical (Z-axis) to foot in forward plane
 
-  float xzPlaneAngle = atan(X / shoulderToFootDist);
+  float xzPlaneAngle = atan2(X, -Z);
   
   // Law of cosines: interior angle of triangle (upper_leg, lower_leg, xzReach)
   // This is the angle at the knee joint
-  float alpha1 = acos((UPPER_LEG_LENGTH * UPPER_LEG_LENGTH + LOWER_LEG_LENGTH * LOWER_LEG_LENGTH - xzPlanarReach * xzPlanarReach) /
-                     (2 * UPPER_LEG_LENGTH * LOWER_LEG_LENGTH));
-  float theta3 = PI - alpha1; // Knee angle (supplementary to interior angle)
+  float alpha1 = (UPPER_LEG_LENGTH * UPPER_LEG_LENGTH + LOWER_LEG_LENGTH * LOWER_LEG_LENGTH - xzPlanarReach * xzPlanarReach) /
+                     (2 * UPPER_LEG_LENGTH * LOWER_LEG_LENGTH);
+  alpha1 = acos(constrain(alpha1, -1.0f, 1.0f)); // Clamp for safety
+  float theta3 = alpha1 - PI; // Knee angle (supplementary to interior angle)
   
   // Law of cosines: angle between upper leg and vertical line to foot
   // This gives the hip angle relative to vertical
-  float alpha2 = acos((UPPER_LEG_LENGTH * UPPER_LEG_LENGTH + xzPlanarReach * xzPlanarReach - LOWER_LEG_LENGTH * LOWER_LEG_LENGTH) /
-                     (2 * UPPER_LEG_LENGTH * xzPlanarReach));
-  float theta2 = xzPlaneAngle - alpha2; // Hip angle = foot angle minus geometric offset
+  float alpha2 = (UPPER_LEG_LENGTH * UPPER_LEG_LENGTH + xzPlanarReach * xzPlanarReach - LOWER_LEG_LENGTH * LOWER_LEG_LENGTH) /
+                     (2 * UPPER_LEG_LENGTH * xzPlanarReach);
+  alpha2 = acos(constrain(alpha2, -1.0f, 1.0f)); // Clamp for safety
+  float theta2 = alpha2 -  xzPlaneAngle; // Hip angle = foot angle minus geometric offset
   
   // ===== CONVERT TO DEGREES AND RETURN =====
   

@@ -5,6 +5,11 @@
 #include "hardware.h"
 #include "servo_control.h"
 
+static float currentServoAngles[15] = {
+    90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90};
+
+
+
 void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
   if (!angles.reachable) {
     return;
@@ -12,21 +17,24 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
 
   float shoulderIK = angles.shoulder;
   float hipIK = angles.hip;
-  float kneeIK = angles.knee;
+  float kneeIK = angles.knee + 90.0f; // 90 Mechanical offset to match servo's neutral position
 
   if (!leg.isLeftSide) {
-    kneeIK = 180 - kneeIK;           // Mirror knee for right side
+    kneeIK = kneeIK;           // Mirror knee for right side
     hipIK = - hipIK;           // Mirror hip for right side 
     // shoulderIK = 180 - shoulderIK; // Mirror shoulder for right side
+  }else {
+    kneeIK = 180 - kneeIK;           // Mirror knee for left side
+    hipIK = hipIK;           // Mirror hip for left side
   }
   if(legIndex == 0 || legIndex == 3) { // FR and BL legs need shoulder mirroring due to mounting orientation
     shoulderIK = 180 - shoulderIK;
   }
 
   // Apply mechanical offsets
-  float shoulderServo = leg.sOffset + shoulderIK;
-  float hipServo = leg.hOffset + hipIK + 90.0f; // Add 90° to hip to match servo's neutral position
-  float kneeServo = leg.kOffset + kneeIK;
+  float shoulderServo = shoulderIK;
+  float hipServo = hipIK + 90.0f; // Add 90° to hip to match servo's neutral position
+  float kneeServo = kneeIK;
 
   // Check saturation
   bool shoulderSat = (shoulderServo < MIN_SERVO_ANGLE || shoulderServo > MAX_SERVO_ANGLE);
@@ -54,9 +62,9 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
   kneeServo = constrain(kneeServo, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
 
   // Apply to servos
-  pwm.setPWM(leg.shoulderCh, 0, PWM(shoulderServo));
-  pwm.setPWM(leg.hipCh, 0, PWM(hipServo));
-  pwm.setPWM(leg.kneeCh, 0, PWM(kneeServo));
+  setServoAngleWithOffset(leg.shoulderCh, shoulderServo);
+  setServoAngleWithOffset(leg.hipCh, hipServo);
+  setServoAngleWithOffset(leg.kneeCh, kneeServo);
 
   if (DEBUG_MODE) {
     const char* legNames[4] = {"FR", "FL", "BR", "BL"};
@@ -79,4 +87,25 @@ void applyServos(const JointAngles &angles, LegConfig &leg, int legIndex) {
     Serial.print(" -> Servo: ");
     Serial.println(kneeServo);
   }
+}
+
+void setServoManual(int servoIndex, float angle) {
+  if (servoIndex < 0 || servoIndex > 14) {
+    Serial.print("ERROR: Invalid servo index ");
+    Serial.print(servoIndex);
+    Serial.println(" (valid: 0-14)");
+    return;
+  }
+
+  angle = constrain(angle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+  currentServoAngles[servoIndex] = angle;
+
+  // Apply to PCA9685 with automatic offset compensation
+  setServoAngleWithOffset(servoIndex, angle);
+
+  Serial.print("Servo ");
+  Serial.print(servoIndex);
+  Serial.print(" -> ");
+  Serial.print(angle);
+  Serial.println("°");
 }

@@ -5,6 +5,8 @@
 #include "globals.h"
 #include "hardware.h"
 
+
+
 bool i2cDevicePresent(uint8_t address) {
   Wire.beginTransmission(address);
   return (Wire.endTransmission() == 0);

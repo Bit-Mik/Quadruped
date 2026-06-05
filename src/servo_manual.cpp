@@ -35,26 +35,7 @@ void printManualControlHelp() {
   Serial.println("====================================\n");
 }
 
-void setServoManual(int servoIndex, float angle) {
-  if (servoIndex < 0 || servoIndex > 14) {
-    Serial.print("ERROR: Invalid servo index ");
-    Serial.print(servoIndex);
-    Serial.println(" (valid: 0-14)");
-    return;
-  }
 
-  angle = constrain(angle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
-  currentServoAngles[servoIndex] = angle;
-
-  // Apply to PCA9685 with automatic offset compensation
-  setServoAngleWithOffset(servoIndex, angle);
-
-  Serial.print("Servo ");
-  Serial.print(servoIndex);
-  Serial.print(" -> ");
-  Serial.print(angle);
-  Serial.println("°");
-}
 
 float getServoAngle(int servoIndex) {
   if (servoIndex < 0 || servoIndex > 14) {
@@ -70,7 +51,7 @@ void setLegPosition(int legIndex, float targetX, float targetY, float targetZ) {
   }
 
   // Compute IK for the target position
-  JointAngles angles = computeIK(targetX, targetY, targetZ, 0.0f);
+  JointAngles angles = computeIK(targetX, targetY, targetZ);
   
   if (!angles.reachable) {
     Serial.println("ERROR: Target position unreachable");
@@ -118,7 +99,7 @@ void handleSerialCommand(String command) {
   // HOME - Set all to 90°
   if (command == "HOME") {
     for (int i = 0; i < 15; i++) {
-      setServoManual(i, 90.0f);
+      setServoAngleWithOffset(i, 90.0f);
     }
     return;
   }

@@ -9,6 +9,9 @@
 #include "imu.h"
 #include "safety.h"
 #include "servo_manual.h"
+#include "ik.h"
+#include "fk.h"
+#include "fun.h"
 
 #ifdef ESP32
 #include "freertos/FreeRTOS.h"
@@ -93,6 +96,54 @@ void loop() {
     }
   }
 
+  //=========================================leg line draw test code=========================================
+  // //Test code for gait
+  float x0 = 0;
+  float y0 = 0;
+  float z0 = -18;
+
+  // for(float x = -5; x <= 5; x += 0.2)//for x axis test
+  // {
+  //   setLegPosition(0, x, y0, z0);
+  //   delay(20);
+  // }
+  
+//   for(float y = -5; y <= 5; y += 0.2)
+// {
+//     setLegPosition(0, x0, y, z0);
+//     delay(20);
+// }
+
+// for(float z = -20; z <= -10; z += 0.2)
+// {
+//     setLegPosition(0, x0, y0, z);
+//     delay(20);
+// }
+// setLegPosition(0, x0, y0, -18);
+//=========================================leg line draw test code end=========================================
+
+//=========================================FK test code=========================================
+//   for(float z=-14; z>=-20; z-=1)
+// {
+//     JointAngles a = computeIK(0,0,z);
+
+//     Serial.print("Z=");
+//     Serial.print(z);
+
+//     Serial.print(" S=");
+//     Serial.print(a.shoulder);
+
+//     Serial.print(" H=");
+//     Serial.print(a.hip);
+
+//     Serial.print(" K=");
+//     Serial.println(a.knee);
+// }
+//=========================================FK test code end=========================================
+
+  // danceSway();
+  // happyDance();
+  // twerk();
   if (!isGaitRunning) {
     return;
   }
@@ -112,8 +163,8 @@ void loop() {
   phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);
 
-  stepLeg(fmod(phaseTime + 0.00f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_BL], LEG_BL);
-  stepLeg(fmod(phaseTime + 0.25f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_FL], LEG_FL);
-  stepLeg(fmod(phaseTime + 0.50f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_FR], LEG_FR);
-  stepLeg(fmod(phaseTime + 0.75f, 1.0f), X_OFFSET, Z_GROUND, legs[LEG_BR], LEG_BR);
+  squareGait(fmod(phaseTime + 0.00f, 1.0f), legs[LEG_BL], LEG_BL);
+  squareGait(fmod(phaseTime + 0.25f, 1.0f), legs[LEG_FR], LEG_FR);
+  squareGait(fmod(phaseTime + 0.50f, 1.0f), legs[LEG_FL], LEG_FL); 
+  squareGait(fmod(phaseTime + 0.75f, 1.0f), legs[LEG_BR], LEG_BR);
 }
