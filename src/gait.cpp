@@ -6,30 +6,18 @@
 #include "servo_control.h"
 #include "servo_manual.h"
 #include <globals.h>
+#include "imu.h"
+#include "stabilization.h"
 
 bool reverseGait = false;
-int steps = STEP_LENGTH / STEPDX;
 FootPos footPos[4];
-void shiftBody(int swingLeg, float target)
-{
-    for(float a = 0; a <= target; a += 0.1f)
-    {
-        lowerBodySide(swingLeg, a);
-        delay(10);
-    }
-}
+GaitState gaitState;
 
-void unshiftBody(int swingLeg, float target)
-{
-    for(float a = target; a >= 0; a -= 0.1f)
-    {
-        lowerBodySide(swingLeg, a);
-        delay(10);
-    }
-}
 
+//=====================Body Control Functions======================
 void initializeFootPositions()
 {
+    gaitState.bodyShiftY = 0;
     for(int i = 0; i < 4; i++)
     {
         footPos[i].x = X_OFFSET;
@@ -38,189 +26,198 @@ void initializeFootPositions()
     }
 }
 
+bool isSwingPhase(float phase)
+{
+    return phase < SWING_PORTION;
+}
+
 void moveFoot(int legIndex, float x, float y, float z)
 {
-    footPos[legIndex].x = x;
-    footPos[legIndex].y = y;
-    footPos[legIndex].z = z;
+    float zComp = 0;
 
-    JointAngles ja = computeIK(x, y, z);
+bool isSwingLeg = gaitState.swing[legIndex];
+
+if(!isSwingLeg)
+{
+    if(legIndex == LEG_FL || legIndex == LEG_BL)
+        zComp += getRollCompLeft();
+    else
+        zComp += getRollCompRight();
+
+    if(legIndex == LEG_FL || legIndex == LEG_FR)
+        zComp += getPitchCompFront();
+    else
+        zComp += getPitchCompRear();
+}
+    footPos[legIndex].x = x;
+    footPos[legIndex].y =
+    y + gaitState.bodyShiftY;;
+    footPos[legIndex].z = z + zComp;
+
+    JointAngles ja = computeIK(
+        footPos[legIndex].x,
+        footPos[legIndex].y,
+        footPos[legIndex].z
+    );
+
     applyServos(ja, legs[legIndex], legIndex);
 }
 
-void setLegZ(int legIndex, float z)
+void updateGaitState(float phaseTime)
 {
-    
+    gaitState.phase[LEG_BL] =
+        fmod(phaseTime + 0.00f, 1.0f);
 
-    moveFoot(legIndex,
-            footPos[legIndex].x,
-            footPos[legIndex].y,
-            z);
-}
+    gaitState.phase[LEG_FR] =
+        fmod(phaseTime + 0.25f, 1.0f);
 
+    gaitState.phase[LEG_FL] =
+        fmod(phaseTime + 0.50f, 1.0f);
 
-void lowerDiagonalLeg(int legIndex)
-{
-    int diag = 3 - legIndex;
+    gaitState.phase[LEG_BR] =
+        fmod(phaseTime + 0.75f, 1.0f);
 
-    setLegZ(diag, Z_GROUND - ROLL_COMP);
-}
+    gaitState.swingLegCount = 0;
 
-void lowerBodySide(int swingLeg, float amount)
-{
-    bool swingIsLeft =
-        (swingLeg == LEG_FL || swingLeg == LEG_BL);
+    gaitState.leftSwing = false;
+    gaitState.rightSwing = false;
 
-    if(swingIsLeft)
+    for(int i = 0; i < 4; i++)
     {
-        setLegZ(LEG_FR, Z_GROUND + amount);
-        setLegZ(LEG_BR, Z_GROUND + amount);
+        gaitState.swing[i] =
+            gaitState.phase[i] < SWING_PORTION;
+
+        if(gaitState.swing[i])
+        {
+            gaitState.swingLegCount++;
+
+            if(i == LEG_FL || i == LEG_BL)
+                gaitState.leftSwing = true;
+
+            if(i == LEG_FR || i == LEG_BR)
+                gaitState.rightSwing = true;
+        }
+    }
+}
+
+void updateSupportShift()
+{
+    float targetShift = 0;
+
+    if(gaitState.leftSwing)
+    targetShift += BODY_SHIFT_GAIN;
+
+    if(gaitState.rightSwing)
+    targetShift -= BODY_SHIFT_GAIN;
+
+    gaitState.bodyShiftY +=
+        SHIFT_SMOOTHING *
+        (targetShift - gaitState.bodyShiftY);
+}
+
+
+//=====================GAIT FUNCTIONS======================
+
+void cosGait(float phase, LegConfig &leg, int legIndex)
+{
+    float X, Y, Z;
+
+    // Keep phase in [0,1)
+    phase = fmod(phase, 1.0f);
+
+    if (phase < 0.5f)
+    {
+        // ======================
+        // Swing Phase
+        // ======================
+        float t = phase / 0.5f;   // 0 → 1
+
+        if (!reverseGait)
+            X = X_OFFSET -STEP_LENGTH/2 + STEP_LENGTH * t;
+        else
+            X = X_OFFSET + STEP_LENGTH/2 - STEP_LENGTH * t;
+
+        Z = Z_GROUND + STEP_HEIGHT * cos(X/STEP_LENGTH * PI);
     }
     else
     {
-        setLegZ(LEG_FL, Z_GROUND + amount);
-        setLegZ(LEG_BL, Z_GROUND + amount);
+        // ======================
+        // Stance Phase
+        // ======================
+        float t = (phase - 0.5f) / 0.5f;   // 0 → 1
+
+        if (!reverseGait)
+            X = X_OFFSET + STEP_LENGTH/2 - STEP_LENGTH * t;
+        else
+            X = X_OFFSET - STEP_LENGTH/2 + STEP_LENGTH * t;
+
+        Z = Z_GROUND;
     }
-}
 
-void cosGait(float phase,LegConfig &leg,int legIndex) {
-  float X=X_OFFSET,Y=Y_OFFSET,Z=Z_GROUND;
-  X = -STEP_LENGTH/2;
-  int n = 0;
-  while(X < STEP_LENGTH/2){
-    if (!reverseGait)
-    X = -STEP_LENGTH/2 + STEPDX*n;
-    else
-    X = STEP_LENGTH/2 - STEPDX*n;
-    Y=Y_OFFSET;
-    Z = Z_GROUND + STEP_HEIGHT * cos(X/STEP_LENGTH * PI);
+    Y = Y_OFFSET;
+
     moveFoot(legIndex, X, Y, Z);
-    delay(50); 
-    n++;
-  }
-
-  //Ground trajectory
-  X=STEP_LENGTH/2;
-  n = 0;
-  while(X > -STEP_LENGTH/2){
-    if (!reverseGait)
-    X = STEP_LENGTH/2 - STEPDX*n;
-    else
-    X = -STEP_LENGTH/2 + STEPDX*n;
-    Y=Y_OFFSET;
-    Z = Z_GROUND;
-    moveFoot(legIndex, X, Y, Z);
-    delay(50); // Faster at start/end, slower at mid-step
-    n++;
-  }
-
 }
 
 void squareGait(float phase, LegConfig &leg, int legIndex)
 {
-  // shiftBody(legIndex, ROLL_COMP);
-  // delay(30);
-    float X=X_OFFSET, Y=Y_OFFSET, Z;
-    int n;
+    float X, Y, Z;
 
-    // Segment lengths
-    float L = STEP_LENGTH;
-    float H = STEP_HEIGHT;
-    float liftSteps = H / STEPDX;
+    const float L = STEP_LENGTH;
+    const float H = STEP_HEIGHT;
 
-    // ======================
-    // 1. Lift vertically
-    // ======================
-    n = 0;
-    Z = Z_GROUND;
+    phase = fmod(phase, 1.0f);
 
-    while (Z < Z_GROUND + H)
+    // ==========================
+    // Swing phase
+    // ==========================
+    if (phase < SWING_PORTION)
     {
-        Z = Z_GROUND + STEPDX * n;
-        float roll = ROLL_COMP * (n / liftSteps);
-        lowerBodySide(legIndex, roll);
+        float t = phase / SWING_PORTION;
 
-        if (Z > Z_GROUND + H)
+        // Lift
+        if (t < LIFT_END)
+        {
+            float s = t / LIFT_END;
+
+            X = X_OFFSET - L/2;
+            Z = Z_GROUND + H * s;
+        }
+
+        // Forward
+        else if (t < SWING_END)
+        {
+            float s = (t - LIFT_END) /
+                      (SWING_END - LIFT_END);
+
+            X = X_OFFSET - L/2 + L * s;
             Z = Z_GROUND + H;
+        }
 
-        X = reverseGait ? X_OFFSET + L/2 : X_OFFSET - L/2;
-        Y = Y_OFFSET;
-
-        moveFoot(legIndex, X, Y, Z);
-
-        delay(20);
-        n++;
-    }
-
-    // ======================
-    // 2. Move forward in air
-    // ======================
-    n = 0;
-    X = reverseGait ? X_OFFSET + L/2 : X_OFFSET - L/2;
-
-    while ((!reverseGait && X < X_OFFSET + L/2) ||
-           ( reverseGait && X > X_OFFSET - L/2)) 
-    {
-        if (!reverseGait)
-            X = X_OFFSET - L/2 + STEPDX * n;
+        // Lower
         else
-            X = X_OFFSET + L/2 - STEPDX * n;
+        {
+            float s = (t - SWING_END) /
+                      (LOWER_END - SWING_END);
 
-        Y = Y_OFFSET;
-        Z = Z_GROUND + H;
-
-        moveFoot(legIndex, X, Y, Z);
-
-        delay(20);
-        n++;
+            X = X_OFFSET + L/2;
+            Z = Z_GROUND + H * (1.0f - s);
+        }
     }
 
-    // ======================
-    // 3. Lower vertically
-    // ======================
-    n = 0;
-    Z = Z_GROUND + H;
-
-    while (Z > Z_GROUND)
+    // ==========================
+    // Stance phase
+    // ==========================
+    else
     {
-        Z = Z_GROUND + H - STEPDX * n;
-        float roll = ROLL_COMP *
-            (1.0f - n / liftSteps);
-          lowerBodySide(legIndex, roll);
+        float t = (phase - SWING_PORTION) /
+                  STANCE_PORTION;
 
-        if (Z < Z_GROUND)
-            Z = Z_GROUND;
-
-        X = reverseGait ? X_OFFSET - L/2 : X_OFFSET + L/2;
-        Y = Y_OFFSET;
-
-        moveFoot(legIndex, X, Y, Z);
-
-        delay(20);
-        n++;
-    }
-
-    // ======================
-    // 4. Ground return
-    // ======================
-    n = 0;
-    X = reverseGait ? X_OFFSET - L/2 : X_OFFSET + L/2;
-
-    while ((!reverseGait && X > X_OFFSET - L/2) ||
-           ( reverseGait && X < X_OFFSET + L/2))
-    {
-        if (!reverseGait)
-            X = X_OFFSET + L/2 - STEPDX * n;
-        else
-            X = X_OFFSET - L/2 + STEPDX * n;
-
-        Y = Y_OFFSET;
+        X = X_OFFSET + L/2 - L * t;
         Z = Z_GROUND;
-
-        moveFoot(legIndex, X, Y, Z);
-
-        delay(20);
-        n++;
     }
-    // unshiftBody(legIndex, ROLL_COMP);
+
+    Y = Y_OFFSET;
+
+    moveFoot(legIndex, X, Y, Z);
 }

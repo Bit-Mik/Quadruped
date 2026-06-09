@@ -101,7 +101,7 @@ void setServoManual(int servoIndex, float angle) {
   currentServoAngles[servoIndex] = angle;
 
   // Apply to PCA9685 with automatic offset compensation
-  setServoAngleWithOffset(servoIndex, angle);
+  pwm.setPWM(servoIndex, 0, PWM(angle));
 
   Serial.print("Servo ");
   Serial.print(servoIndex);

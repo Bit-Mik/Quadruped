@@ -12,6 +12,7 @@
 #include "ik.h"
 #include "fk.h"
 #include "fun.h"
+#include "stabilization.h"
 
 #ifdef ESP32
 #include "freertos/FreeRTOS.h"
@@ -54,6 +55,9 @@ void setup() {
   delay(50);  // Wait for frequency to be applied
 
   initializeServos();
+  delay(6000);  // Let servos move to initial position
+  imuInit();
+
 
   if (imuInit()) {
     Serial.println("IMU detected and initialized.");
@@ -68,6 +72,9 @@ void setup() {
     Serial.println("WARNING: Failed to create IMU task");
   }
 #endif
+
+  calibrateBodyPose();
+  stabilizationInit();
 
   lastTime = millis();
   DEBUG_MODE = true;
@@ -163,8 +170,16 @@ void loop() {
   phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);
 
-  squareGait(fmod(phaseTime + 0.00f, 1.0f), legs[LEG_BL], LEG_BL);
-  squareGait(fmod(phaseTime + 0.25f, 1.0f), legs[LEG_FR], LEG_FR);
-  squareGait(fmod(phaseTime + 0.50f, 1.0f), legs[LEG_FL], LEG_FL); 
-  squareGait(fmod(phaseTime + 0.75f, 1.0f), legs[LEG_BR], LEG_BR);
+  // updateBodyCompensation();
+  // squareGait(fmod(phaseTime + 0.00f, 1.0f), legs[LEG_BL], LEG_BL);
+  // squareGait(fmod(phaseTime + 0.25f, 1.0f), legs[LEG_FR], LEG_FR);
+  // squareGait(fmod(phaseTime + 0.50f, 1.0f), legs[LEG_FL], LEG_FL); 
+  // squareGait(fmod(phaseTime + 0.75f, 1.0f), legs[LEG_BR], LEG_BR);
+
+  updateBodyCompensation();
+
+  moveFoot(LEG_FL, X_OFFSET, Y_OFFSET, Z_GROUND);
+  moveFoot(LEG_FR, X_OFFSET, Y_OFFSET, Z_GROUND);
+  moveFoot(LEG_BL, X_OFFSET, Y_OFFSET, Z_GROUND);
+  moveFoot(LEG_BR, X_OFFSET, Y_OFFSET, Z_GROUND);
 }

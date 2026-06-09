@@ -22,8 +22,6 @@
 JointAngles computeIK(float X, float Y, float Z) {
   JointAngles result;
   result.reachable = false;
-  // Y+=SHOULDER_LENGTH;
-  // X+=SHOULDER_WIDTH;
 
   // ===== STAGE 1: REACHABILITY CHECK =====
   
