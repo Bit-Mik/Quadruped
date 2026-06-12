@@ -65,8 +65,14 @@ void initializeServos() {
     // setServoAngleWithOffset(legs[i].shoulderCh, 90.0f);
     // setServoAngleWithOffset(legs[i].hipCh, 90.0f);
     // setServoAngleWithOffset(legs[i].kneeCh, 90.0f);
-    setLegPosition(i, X_OFFSET, Y_OFFSET, Z_GROUND); // Use IK to set to neutral pose with offsets
-    delay(50);
+    if(i>1){// rear legs
+      setLegPosition(i, X_OFFSET + REAR_X_BIAS, Y_OFFSET, Z_GROUND); 
+    }
+    else{//front legs
+      setLegPosition(i, X_OFFSET + FRONT_X_BIAS, Y_OFFSET, Z_GROUND); 
+    }
+    
+    delay(100);
   }
 
   Serial.println("Settling...");

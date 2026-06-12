@@ -1,0 +1,12 @@
+body{
+    background:#121212;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+}
+
+button{
+    width:120px;
+    height:50px;
+    margin:10px;
+}

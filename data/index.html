@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Quadruped Dashboard</title>
+
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="data:,">
+</head>
+<body>
+
+    <h1>Quadruped Dashboard</h1>
+
+    <button onclick="sendCmd('forward')">Forward</button>
+    <button onclick="sendCmd('backward')">Backward</button>
+    <button onclick="sendCmd('left')">Left</button>
+    <button onclick="sendCmd('right')">Right</button>
+    <button onclick="sendCmd('stop')">Stop</button>
+    <button onclick="sendCmd('stand')">Stand</button>
+    
+    <div class="panel">
+    <h2>Telemetry</h2>
+
+    <p>Roll: <span id="roll">0</span></p>
+    <p>Pitch: <span id="pitch">0</span></p>
+    <p>Yaw: <span id="yaw">0</span></p>
+    </div>
+
+    <script src="/script.js"></script>
+    <script src="/dashboard.js"></script>
+    <script src="pid.js"></script>
+
+
+</body>
+</html>

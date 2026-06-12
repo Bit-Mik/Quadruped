@@ -2,6 +2,7 @@
 #include "pid.h"
 #include "config.h"
 #include "imu.h"
+#include "globals.h"
 
 static PID rollPID(
     KP_ROLL,
@@ -98,12 +99,13 @@ void updateBodyCompensation()
     DEBUG_PRINTLN(imu.pitchDeg);
 
     float rollMeasurement = imu.rollDeg;
-float pitchMeasurement = imu.pitchDeg;
+    float pitchMeasurement = imu.pitchDeg;
 
-    if(fabs(rollSetpoint - rollMeasurement) < 0.5f)
+
+    if(fabs(rollSetpoint - rollMeasurement) < ROLL_DEADBAND)
     rollMeasurement = rollSetpoint;
 
-    if(fabs(pitchSetpoint - pitchMeasurement) < 0.5f)
+    if(fabs(pitchSetpoint - pitchMeasurement) < PITCH_DEADBAND)
     pitchMeasurement = pitchSetpoint;
 
     float rollCorr = rollPID.update(
@@ -129,6 +131,6 @@ float pitchMeasurement = imu.pitchDeg;
     rollCompLeft  = rollCorr;
     rollCompRight = -rollCorr;
 
-// pitchCompFront = pitchCorr;
-// pitchCompRear  = -pitchCorr;
+    pitchCompFront = -pitchCorr;
+    pitchCompRear  = pitchCorr;
 }

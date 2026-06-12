@@ -5,41 +5,45 @@
 constexpr int FREQUENCY = 50; //// PWM update frequency for servos (50Hz = standard for analog servos)
 constexpr float PERIOD_MS = 1000.0f / FREQUENCY; // Period of one PWM cycle in milliseconds, Used to convert angle → PCA9685 ticks
 constexpr float CONTROL_DT = 0.01f; // Control loop timestep (seconds). 10 ms control update rate 
-constexpr float Z_GROUND = -15.5f; // Target Y position of foot on the ground (cm) - within max reach (~22.5cm)
+constexpr float Z_GROUND = -16.0f; // Target Y position of foot on the ground (cm) - within max reach (~22.5cm)
 constexpr float X_OFFSET = -1.5f; //(0.0f) Forward/backward offset of foot relative to hip in IK coordinate frame (cm)
-constexpr float Y_OFFSET = 0.5f; // Lateral offset of foot relative to shoulder in IK coordinate frame (cm)
+constexpr float Y_OFFSET = 0.0f; // Lateral offset of foot relative to shoulder in IK coordinate frame (cm)
 // Link lengths (cm or same unit as targetX, targetY)
 constexpr float SHOULDER_LENGTH = 3.5f;   // Offset from hip pivot to shoulder servo pivot (cm)(Rz)
 constexpr float SHOULDER_WIDTH = 4.1f; // Offset from shoulder pivot to upper leg pivot (cm)(Ry)
 constexpr float UPPER_LEG_LENGTH = 10.0f; // Length of upper leg (hip → knee) in cm
 constexpr float LOWER_LEG_LENGTH = 10.0f; // Length of lower leg (knee → foot) in cm
+constexpr float FRONT_X_BIAS = 5.0f;
+constexpr float REAR_X_BIAS = -1.0f;
 
 //========================================PID parameters========================================
-constexpr float ROLL_DEADBAND  = 0.5f;  // degrees
-constexpr float PITCH_DEADBAND = 0.5f;  // degrees
+extern float ROLL_DEADBAND ;  // degrees
+extern float PITCH_DEADBAND;  // degrees
 
-constexpr float KP_ROLL = 0.2f;
-constexpr float KI_ROLL = 0.0f;
-constexpr float KD_ROLL = 0.05f;
+extern float KP_ROLL;
+extern float KI_ROLL;
+extern float KD_ROLL;
 
-constexpr float KP_PITCH = 0.2f;
-constexpr float KI_PITCH = 0.0f;
-constexpr float KD_PITCH = 0.05f;
+extern float KP_PITCH;
+extern float KI_PITCH;
+extern float KD_PITCH;
 
-constexpr float MAX_ROLL_CORR  = 0.5f; // cm
-constexpr float MAX_PITCH_CORR = 0.5f; // cm
+extern float MAX_ROLL_CORR; // cm
+extern float MAX_PITCH_CORR; // cm
 
-//=========================================Gait parameters========================================
+//==================================Gait parameters========================================
 // Gait parameters
-constexpr float STEP_LENGTH = 5.0f;
-constexpr float STEP_HEIGHT = 0.8f;
-constexpr float ROLL_COMP=0.2f;  
-constexpr float BODY_SHIFT_GAIN = 0.5f;
-constexpr float SHIFT_SMOOTHING = 0.05f;
-const float GAIT_CYCLE_DURATION=1.0f;  // seconds per full gait cycle
+extern float STEP_LENGTH;
+extern float STEP_HEIGHT;
+extern float ROLL_COMP;  
+extern float BODY_SHIFT_Y;
+extern float BODY_SHIFT_X;
+extern float BODY_SHIFT_GAIN;
+extern float SHIFT_SMOOTHING;
+extern float GAIT_CYCLE_DURATION;  // seconds per full gait cycle
 // Gait timing
-constexpr float SWING_PORTION = 0.25f;
-constexpr float STANCE_PORTION = 0.75f;
+constexpr float SWING_PORTION = 0.20f;
+constexpr float STANCE_PORTION = 0.80f;
 
 // Swing subdivision
 constexpr float LIFT_END  = 0.20f;

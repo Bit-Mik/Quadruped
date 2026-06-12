@@ -4,4 +4,5 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode
+./include/secrets.h
 Quadruped.code-workspace

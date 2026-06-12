@@ -1,5 +1,7 @@
 #pragma once
 
+extern float targetForward;
+extern float targetTurn;
 struct LegConfig {
   int shoulderCh;
   int hipCh;
@@ -30,4 +32,21 @@ struct FootPos
     float y;
     float z;
 };
+
+struct RuntimeConfig
+{
+    float kp;
+    float ki;
+    float kd;
+
+    float bodyHeight;
+
+    float stepLength;
+    float stepHeight;
+
+    float forwardSpeed;
+    float turnSpeed;
+};
+
+
 

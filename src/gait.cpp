@@ -12,7 +12,16 @@
 bool reverseGait = false;
 FootPos footPos[4];
 GaitState gaitState;
-
+float bodyShiftX = 0;
+float bodyShiftY = 0;
+const int gaitOrder[4] =
+{
+    LEG_FR,
+    LEG_BR,
+    LEG_FL,
+    LEG_BL
+};
+float xBias;
 
 //=====================Body Control Functions======================
 void initializeFootPositions()
@@ -49,9 +58,15 @@ if(!isSwingLeg)
     else
         zComp += getPitchCompRear();
 }
-    footPos[legIndex].x = x;
+    if (legIndex == LEG_FR || legIndex == LEG_FL)
+        xBias = FRONT_X_BIAS;
+    else 
+        xBias = REAR_X_BIAS;
+    footPos[legIndex].x =
+    x + xBias + gaitState.bodyShiftX;
+
     footPos[legIndex].y =
-    y + gaitState.bodyShiftY;;
+    y + gaitState.bodyShiftY;
     footPos[legIndex].z = z + zComp;
 
     JointAngles ja = computeIK(
@@ -65,22 +80,19 @@ if(!isSwingLeg)
 
 void updateGaitState(float phaseTime)
 {
-    gaitState.phase[LEG_BL] =
-        fmod(phaseTime + 0.00f, 1.0f);
+    for(int step = 0; step < 4; step++)
+    {
+        int leg = gaitOrder[step];
 
-    gaitState.phase[LEG_FR] =
-        fmod(phaseTime + 0.25f, 1.0f);
-
-    gaitState.phase[LEG_FL] =
-        fmod(phaseTime + 0.50f, 1.0f);
-
-    gaitState.phase[LEG_BR] =
-        fmod(phaseTime + 0.75f, 1.0f);
+        gaitState.phase[leg] =
+            fmod(phaseTime + step * 0.25f, 1.0f);
+    }
 
     gaitState.swingLegCount = 0;
-
     gaitState.leftSwing = false;
     gaitState.rightSwing = false;
+
+    static int lastSwingLeg = -1;
 
     for(int i = 0; i < 4; i++)
     {
@@ -89,6 +101,21 @@ void updateGaitState(float phaseTime)
 
         if(gaitState.swing[i])
         {
+            if(i != lastSwingLeg)
+            {
+                lastSwingLeg = i;
+
+                Serial.print("NEW SWING = ");
+
+                switch(i)
+                {
+                    case LEG_FR: Serial.println("FR"); break;
+                    case LEG_FL: Serial.println("FL"); break;
+                    case LEG_BR: Serial.println("BR"); break;
+                    case LEG_BL: Serial.println("BL"); break;
+                }
+            }
+
             gaitState.swingLegCount++;
 
             if(i == LEG_FL || i == LEG_BL)
@@ -98,21 +125,53 @@ void updateGaitState(float phaseTime)
                 gaitState.rightSwing = true;
         }
     }
-}
-
+}  
 void updateSupportShift()
 {
-    float targetShift = 0;
+    float targetShiftY = 0.0f;
+    float targetShiftX = 0.0f;
 
-    if(gaitState.leftSwing)
-    targetShift += BODY_SHIFT_GAIN;
+    int swingLeg = -1;
 
-    if(gaitState.rightSwing)
-    targetShift -= BODY_SHIFT_GAIN;
+    for(int i = 0; i < 4; i++)
+    {
+        if(gaitState.swing[i])
+        {
+            swingLeg = i;
+            break;
+        }
+    }
+
+    switch(swingLeg)
+    {
+        case LEG_FR:
+            targetShiftY = +BODY_SHIFT_Y;   // shift left
+            targetShiftX = +BODY_SHIFT_X;             // shift rear
+            break;
+
+        case LEG_FL:
+            targetShiftY = -BODY_SHIFT_Y;   // shift right
+            targetShiftX = +BODY_SHIFT_X;             // shift rear
+            break;
+
+        case LEG_BR:
+            targetShiftY = +BODY_SHIFT_Y;   // shift left
+            targetShiftX = +BODY_SHIFT_X;             // shift forward
+            break;
+
+        case LEG_BL:
+            targetShiftY = -BODY_SHIFT_Y;   // shift right
+            targetShiftX = +BODY_SHIFT_X;             // shift forward
+            break;
+    }
 
     gaitState.bodyShiftY +=
         SHIFT_SMOOTHING *
-        (targetShift - gaitState.bodyShiftY);
+        (targetShiftY - gaitState.bodyShiftY);
+
+    gaitState.bodyShiftX +=
+        SHIFT_SMOOTHING *
+        (targetShiftX - gaitState.bodyShiftX);
 }
 
 

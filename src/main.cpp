@@ -1,7 +1,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
+#include <WiFi.h>
 
+#include "telemetry.h"
+#include "wifi_manager.h"
+#include "webserver.h"
 #include "config.h"
 #include "gait.h"
 #include "globals.h"
@@ -53,10 +57,15 @@ void setup() {
   delay(50);  // Ensure PCA9685 has time to initialize
   pwm.setPWMFreq(FREQUENCY);
   delay(50);  // Wait for frequency to be applied
+  
+  // WiFi.softAP("Quadruped");
+  // Serial.println(WiFi.softAPIP());
+  connectWiFi();
+  initWebUI();
+  delay(100);  // Let WiFi stabilize
 
   initializeServos();
   delay(6000);  // Let servos move to initial position
-  imuInit();
 
 
   if (imuInit()) {
@@ -65,26 +74,49 @@ void setup() {
     Serial.println("IMU not available yet (running open-loop gait).");
   }
 
-#ifdef ESP32
-  // Create a FreeRTOS task to drive IMU updates at CONTROL_DT interval
-  BaseType_t r = xTaskCreate(imuTaskFunc, "IMU", 4096, NULL, 2, NULL);
-  if (r != pdPASS) {
-    Serial.println("WARNING: Failed to create IMU task");
-  }
-#endif
+// #ifdef ESP32
+//   // Create a FreeRTOS task to drive IMU updates at CONTROL_DT interval
+//   BaseType_t r = xTaskCreate(imuTaskFunc, "IMU", 4096, NULL, 2, NULL);
+//   if (r != pdPASS) {
+//     Serial.println("WARNING: Failed to create IMU task");
+//   }
+// #endif
+  for(int i=0;i<100;i++)
+{
+    imuUpdate(CONTROL_DT);
 
-  calibrateBodyPose();
+    const ImuState& imu = imuGetState();
+
+    Serial.print("Roll=");
+    Serial.print(imu.rollDeg);
+
+    Serial.print(" Pitch=");
+    Serial.println(imu.pitchDeg);
+
+    delay(20);
+}
   stabilizationInit();
 
   lastTime = millis();
-  DEBUG_MODE = true;
+  DEBUG_MODE = 0;
   isGaitRunning = false;
   Serial.println("Ready. Type HELP for manual servo control commands.");
   printManualControlHelp();
 }
 
 void loop() {
+//====================clock===============
+  unsigned long now = millis();
+  float dt = (now - lastTime) / 1000.0f;
+  if (dt < CONTROL_DT) {
+    return;
+  }
+  lastTime = now;
+//====================clock end===============
+
+  imuUpdate(dt);
   // Handle serial commands
+  sendTelemetry();
   if (Serial.available()) {
     char c = Serial.read();
     static String command = "";
@@ -155,31 +187,38 @@ void loop() {
     return;
   }
 
-  unsigned long now = millis();
-  float dt = (now - lastTime) / 1000.0f;
-  if (dt < CONTROL_DT) {
-    return;
-  }
-  lastTime = now;
+  
 
   // IMU update handled in FreeRTOS task on ESP32; keep calling on AVR/UNO.
-#ifndef ESP32
-  imuUpdate(dt);
-#endif
-
+// #ifndef ESP32
+//   imuUpdate(dt);
+// #endif
   phaseTime += dt / GAIT_CYCLE_DURATION;
   phaseTime = fmod(phaseTime, 1.0f);
 
-  // updateBodyCompensation();
-  // squareGait(fmod(phaseTime + 0.00f, 1.0f), legs[LEG_BL], LEG_BL);
-  // squareGait(fmod(phaseTime + 0.25f, 1.0f), legs[LEG_FR], LEG_FR);
-  // squareGait(fmod(phaseTime + 0.50f, 1.0f), legs[LEG_FL], LEG_FL); 
-  // squareGait(fmod(phaseTime + 0.75f, 1.0f), legs[LEG_BR], LEG_BR);
-
+  updateGaitState(phaseTime);
+  updateSupportShift();
   updateBodyCompensation();
+  for(int leg = 0; leg < 4; leg++)
+{
+    squareGait(
+        gaitState.phase[leg],
+        legs[leg],
+        leg
+    );
+}
+static uint32_t lastPrint = 0;
 
-  moveFoot(LEG_FL, X_OFFSET, Y_OFFSET, Z_GROUND);
-  moveFoot(LEG_FR, X_OFFSET, Y_OFFSET, Z_GROUND);
-  moveFoot(LEG_BL, X_OFFSET, Y_OFFSET, Z_GROUND);
-  moveFoot(LEG_BR, X_OFFSET, Y_OFFSET, Z_GROUND);
+if(millis() - lastPrint > 500)
+{
+    lastPrint = millis();
+
+    Serial.print("phaseTime=");
+    Serial.println(phaseTime, 3);
+}
+
+//   moveFoot(LEG_FL, X_OFFSET, Y_OFFSET, Z_GROUND);
+//   moveFoot(LEG_FR, X_OFFSET, Y_OFFSET, Z_GROUND);
+//   moveFoot(LEG_BL, X_OFFSET, Y_OFFSET, Z_GROUND);
+//   moveFoot(LEG_BR, X_OFFSET, Y_OFFSET, Z_GROUND);
 }
