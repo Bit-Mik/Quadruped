@@ -8,8 +8,8 @@ extern Adafruit_PWMServoDriver pwm;
 extern LegConfig legs[4];
 extern SaturationStats satStats;
 extern RuntimeConfig cfg;
+extern volatile RobotMode robotMode;
 
-extern float phaseTime;
+extern volatile float phaseTime;
 extern unsigned long lastTime;
-extern bool isGaitRunning;
 extern bool initializationMode;

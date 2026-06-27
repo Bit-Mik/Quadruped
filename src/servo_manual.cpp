@@ -7,8 +7,7 @@
 #include "servo_control.h"
 
 // Track current servo angles (0-14 for 15 total servos)
-static float currentServoAngles[15] = {
-    90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90};
+extern float currentServoAngles[15];
 
 void printManualControlHelp() {
   Serial.println("\n=== Manual Servo Control Help ===");
@@ -84,20 +83,28 @@ void handleSerialCommand(String command) {
 
   // START/START GAIT
   if (command == "G" || command == "START" || command == "GAIT") {
-    isGaitRunning = true;
+    targetForward = 1.0f;
+    targetTurn = 0.0f;
+    robotMode = MODE_GAIT;
+    phaseTime = GAIT_START_PHASE;
     Serial.println("Gait started.");
     return;
   }
 
   // STOP/EMERGENCY STOP
   if (command == "STOP" || command == "S") {
-    isGaitRunning = false;
+    targetForward = 0.0f;
+    targetTurn = 0.0f;
+    robotMode = MODE_STAND;
     Serial.println("Gait stopped.");
     return;
   }
 
   // HOME - Set all to 90°
   if (command == "HOME") {
+    targetForward = 0.0f;
+    targetTurn = 0.0f;
+    robotMode = MODE_MANUAL;
     for (int i = 0; i < 15; i++) {
       setServoAngleWithOffset(i, 90.0f);
     }
@@ -150,6 +157,9 @@ void handleSerialCommand(String command) {
       int servoIdx = numStr.toInt();
       float angle = angleStr.toFloat();
 
+      targetForward = 0.0f;
+      targetTurn = 0.0f;
+      robotMode = MODE_MANUAL;
       setServoManual(servoIdx, angle);
     } else if (qPos >= 0 && qPos > 0) {
       // S<n>? format - query servo angle
@@ -202,6 +212,10 @@ void handleSerialCommand(String command) {
     Serial.print(angle);
     Serial.println("°...");
 
+    targetForward = 0.0f;
+    targetTurn = 0.0f;
+    robotMode = MODE_MANUAL;
+
     for (int i = 0; i < 15; i++) {
       setServoManual(i, angle);
     }
@@ -243,6 +257,9 @@ void handleSerialCommand(String command) {
     else if (legName == "BL") legIndex = LEG_BL;
     
     if (legIndex >= 0) {
+      targetForward = 0.0f;
+      targetTurn = 0.0f;
+      robotMode = MODE_MANUAL;
       setLegPosition(legIndex, targetX, targetY, targetZ);
     }
     return;

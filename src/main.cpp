@@ -17,22 +17,8 @@
 #include "fk.h"
 #include "fun.h"
 #include "stabilization.h"
+#include "tasks.h"
 
-#ifdef ESP32
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-// IMU update task for FreeRTOS (ESP32 only)
-static void imuTaskFunc(void *pvParameters) {
-  (void)pvParameters;
-  const TickType_t period = pdMS_TO_TICKS((int)(CONTROL_DT * 1000));
-  TickType_t lastWake = xTaskGetTickCount();
-  for (;;) {
-    imuUpdate(CONTROL_DT);
-    vTaskDelayUntil(&lastWake, period);
-  }
-}
-#endif
 
 void setup() {
   Serial.begin(115200);
@@ -53,6 +39,7 @@ void setup() {
   }
   Serial.println("PCA9685 detected.");
 
+  initHardwareLocks();
   pwm.begin();
   delay(50);  // Ensure PCA9685 has time to initialize
   pwm.setPWMFreq(FREQUENCY);
@@ -74,48 +61,20 @@ void setup() {
     Serial.println("IMU not available yet (running open-loop gait).");
   }
 
-// #ifdef ESP32
-//   // Create a FreeRTOS task to drive IMU updates at CONTROL_DT interval
-//   BaseType_t r = xTaskCreate(imuTaskFunc, "IMU", 4096, NULL, 2, NULL);
-//   if (r != pdPASS) {
-//     Serial.println("WARNING: Failed to create IMU task");
-//   }
-// #endif
-  for(int i=0;i<100;i++)
-{
-    imuUpdate(CONTROL_DT);
 
-    const ImuState& imu = imuGetState();
-
-    Serial.print("Roll=");
-    Serial.print(imu.rollDeg);
-
-    Serial.print(" Pitch=");
-    Serial.println(imu.pitchDeg);
-
-    delay(20);
-}
   stabilizationInit();
+  startTasks();
 
   lastTime = millis();
   DEBUG_MODE = 0;
-  isGaitRunning = false;
+  robotMode = MODE_STAND;
   Serial.println("Ready. Type HELP for manual servo control commands.");
   printManualControlHelp();
 }
 
 void loop() {
-//====================clock===============
-  unsigned long now = millis();
-  float dt = (now - lastTime) / 1000.0f;
-  if (dt < CONTROL_DT) {
-    return;
-  }
-  lastTime = now;
-//====================clock end===============
 
-  imuUpdate(dt);
-  // Handle serial commands
+   // Handle serial commands
   sendTelemetry();
   if (Serial.available()) {
     char c = Serial.read();
@@ -135,11 +94,21 @@ void loop() {
     }
   }
 
+//====================clock===============
+  unsigned long now = millis();
+  float dt = (now - lastTime) / 1000.0f;
+  if (dt < CONTROL_DT) {
+    return;
+  }
+  lastTime = now;
+//====================clock end===============
+
+
   //=========================================leg line draw test code=========================================
   // //Test code for gait
-  float x0 = 0;
-  float y0 = 0;
-  float z0 = -18;
+  // float x0 = 0;
+  // float y0 = 0;
+  // float z0 = -18;
 
   // for(float x = -5; x <= 5; x += 0.2)//for x axis test
   // {
@@ -183,42 +152,63 @@ void loop() {
   // danceSway();
   // happyDance();
   // twerk();
-  if (!isGaitRunning) {
-    return;
-  }
+  RobotMode mode = robotMode;
 
-  
-
-  // IMU update handled in FreeRTOS task on ESP32; keep calling on AVR/UNO.
-// #ifndef ESP32
-//   imuUpdate(dt);
-// #endif
-  phaseTime += dt / GAIT_CYCLE_DURATION;
-  phaseTime = fmod(phaseTime, 1.0f);
-
-  updateGaitState(phaseTime);
-  updateSupportShift();
-  updateBodyCompensation();
-  for(int leg = 0; leg < 4; leg++)
+  switch(mode)
 {
-    squareGait(
-        gaitState.phase[leg],
-        legs[leg],
-        leg
-    );
+    case MODE_MANUAL:
+        // User is controlling legs manually.
+        // Do not overwrite commands.
+        break;
+
+    case MODE_STAND:
+
+        updateBodyCompensation();
+
+        moveFoot(LEG_FR, X_OFFSET, Y_OFFSET, Z_GROUND);
+        moveFoot(LEG_FL, X_OFFSET, Y_OFFSET, Z_GROUND);
+        moveFoot(LEG_BR, X_OFFSET, Y_OFFSET, Z_GROUND);
+        moveFoot(LEG_BL, X_OFFSET, Y_OFFSET, Z_GROUND);
+
+        return;
+
+    case MODE_GAIT:
+    {
+        float cycleDuration = GAIT_CYCLE_DURATION;
+        if(cycleDuration < CONTROL_DT)
+        {
+            cycleDuration = CONTROL_DT;
+        }
+
+        float gaitPhase = phaseTime;
+        gaitPhase += dt / cycleDuration;
+        gaitPhase = fmod(gaitPhase, 1.0f);
+        phaseTime = gaitPhase;
+
+        updateGaitState(gaitPhase);
+        updateSupportShift();
+        updateBodyCompensation();
+
+        for(int leg = 0; leg < 4; leg++)
+        {
+            squareGait(
+                gaitState.phase[leg],
+                legs[leg],
+                leg
+            );
+        }
+
+        static uint32_t lastPrint = 0;
+
+        if(DEBUG_MODE && millis() - lastPrint > 500)
+        {
+            lastPrint = millis();
+
+            Serial.print("phaseTime=");
+            Serial.println(gaitPhase, 3);
+        }
+        break;
+    }
 }
-static uint32_t lastPrint = 0;
 
-if(millis() - lastPrint > 500)
-{
-    lastPrint = millis();
-
-    Serial.print("phaseTime=");
-    Serial.println(phaseTime, 3);
-}
-
-//   moveFoot(LEG_FL, X_OFFSET, Y_OFFSET, Z_GROUND);
-//   moveFoot(LEG_FR, X_OFFSET, Y_OFFSET, Z_GROUND);
-//   moveFoot(LEG_BL, X_OFFSET, Y_OFFSET, Z_GROUND);
-//   moveFoot(LEG_BR, X_OFFSET, Y_OFFSET, Z_GROUND);
 }

@@ -13,7 +13,7 @@ void sendTelemetry()
         return;
 
     lastSend = millis();
-    const ImuState& imu = imuGetState();
+    ImuState imu = imuGetState();
     String json =
         "{\"roll\":" + String(imu.rollDeg, 2) +
         ",\"pitch\":" + String(imu.pitchDeg, 2) +

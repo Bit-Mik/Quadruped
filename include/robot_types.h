@@ -1,7 +1,13 @@
 #pragma once
 
-extern float targetForward;
-extern float targetTurn;
+extern volatile float targetForward;
+extern volatile float targetTurn;
+enum RobotMode
+{
+    MODE_STAND,
+    MODE_GAIT,
+    MODE_MANUAL
+};
 struct LegConfig {
   int shoulderCh;
   int hipCh;
@@ -47,6 +53,5 @@ struct RuntimeConfig
     float forwardSpeed;
     float turnSpeed;
 };
-
 
 

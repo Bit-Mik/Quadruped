@@ -10,7 +10,9 @@
 
 void emergencyStop() {
   Serial.println("\n!!! EMERGENCY STOP !!!");
-  isGaitRunning = false;
+  targetForward = 0.0f;
+  targetTurn = 0.0f;
+  robotMode = MODE_STAND;
 
   JointAngles neutralAngles = computeIK(X_OFFSET, Y_OFFSET, Z_GROUND);
   if (neutralAngles.reachable) {

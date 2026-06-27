@@ -2,6 +2,8 @@
 #include "globals.h"
 
 Adafruit_PWMServoDriver pwm;
+volatile RobotMode robotMode = MODE_MANUAL;
+
 
 // Channel mapping: FR: 0,1,2 | FL: 4,5,6 | BR: 8,9,10 | BL: 12,13,14
 // Calibration offsets: value - 90 (where 90 is ideal mid position)
@@ -33,17 +35,17 @@ float MAX_PITCH_CORR = 1.0f; // cm
 float STEP_LENGTH = 3.0f;
 float STEP_HEIGHT = 2.5f;
 float ROLL_COMP=0.2f;  
-float BODY_SHIFT_X = 0.0f;
-float BODY_SHIFT_Y = 0.0f;
+float BODY_SHIFT_X = 0.8f;
+float BODY_SHIFT_Y = 0.8f;
+float BODY_X_TRIM = -1.0f;
 float BODY_SHIFT_GAIN = 0.5f;
 float SHIFT_SMOOTHING = 0.05f;
-float GAIT_CYCLE_DURATION=2.0f;  // seconds per full gait cycle
+float GAIT_CYCLE_DURATION=5.0f;  // seconds per full gait cycle
 
-float targetForward = 0.0f;
-float targetTurn = 0.0f;
+volatile float targetForward = 0.0f;
+volatile float targetTurn = 0.0f;
 
-float phaseTime = 0.0f;
+volatile float phaseTime = 0.0f;
 unsigned long lastTime = 0;
 bool DEBUG_MODE = false;
-bool isGaitRunning = false;
 bool initializationMode = false;

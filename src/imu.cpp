@@ -2,6 +2,18 @@
 #include <Arduino.h>
 #include "config.h"
 
+#ifdef ESP32
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
+
+static portMUX_TYPE imuStateMux = portMUX_INITIALIZER_UNLOCKED;
+#define IMU_STATE_LOCK() portENTER_CRITICAL(&imuStateMux)
+#define IMU_STATE_UNLOCK() portEXIT_CRITICAL(&imuStateMux)
+#else
+#define IMU_STATE_LOCK()
+#define IMU_STATE_UNLOCK()
+#endif
+
 HardwareSerial RazorSerial(2);
 
 static ImuState g_imuState;
@@ -18,7 +30,12 @@ bool imuInit()
         17    // TX2
     );
 
+    unsigned long now = millis();
+
+    IMU_STATE_LOCK();
     g_imuState.healthy = true;
+    g_imuState.lastUpdateMs = now;
+    IMU_STATE_UNLOCK();
 
     return true;
 }
@@ -36,12 +53,16 @@ static void parseYPR(const String& line)
         &pitch,
         &roll) == 3)
     {
+        unsigned long now = millis();
+
+        IMU_STATE_LOCK();
         g_imuState.yawDeg   = yaw;
         g_imuState.pitchDeg = roll;
         g_imuState.rollDeg  = pitch;
 
-        g_imuState.lastUpdateMs = millis();
+        g_imuState.lastUpdateMs = now;
         g_imuState.healthy = true;
+        IMU_STATE_UNLOCK();
 
         static uint32_t lastPrint = 0;
 
@@ -63,6 +84,8 @@ static void parseYPR(const String& line)
 
 bool imuUpdate(float dt)
 {
+    (void)dt;
+
     while(RazorSerial.available())
     {
         char c = RazorSerial.read();
@@ -80,21 +103,33 @@ bool imuUpdate(float dt)
         }
     }
 
-    if(millis() - g_imuState.lastUpdateMs > 1000)
+    ImuState snapshot = imuGetState();
+
+    if(millis() - snapshot.lastUpdateMs > 1000)
     {
+        IMU_STATE_LOCK();
         g_imuState.healthy = false;
+        IMU_STATE_UNLOCK();
+        snapshot.healthy = false;
     }
 
-    return g_imuState.healthy;
+    return snapshot.healthy;
 }
 
-const ImuState& imuGetState()
+ImuState imuGetState()
 {
-    return g_imuState;
+    IMU_STATE_LOCK();
+    ImuState snapshot = g_imuState;
+    IMU_STATE_UNLOCK();
+
+    return snapshot;
 }
 
 void imuReset()
 {
+    unsigned long now = millis();
+
+    IMU_STATE_LOCK();
     g_imuState.rollDeg = 0;
     g_imuState.pitchDeg = 0;
     g_imuState.yawDeg = 0;
@@ -103,5 +138,7 @@ void imuReset()
     g_imuState.pitchRateDps = 0;
     g_imuState.yawRateDps = 0;
 
+    g_imuState.lastUpdateMs = now;
     g_imuState.healthy = false;
+    IMU_STATE_UNLOCK();
 }

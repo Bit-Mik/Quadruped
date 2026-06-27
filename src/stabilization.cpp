@@ -4,6 +4,18 @@
 #include "imu.h"
 #include "globals.h"
 
+#ifdef ESP32
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
+
+static portMUX_TYPE stabilizationMux = portMUX_INITIALIZER_UNLOCKED;
+#define STABILIZATION_LOCK() portENTER_CRITICAL(&stabilizationMux)
+#define STABILIZATION_UNLOCK() portEXIT_CRITICAL(&stabilizationMux)
+#else
+#define STABILIZATION_LOCK()
+#define STABILIZATION_UNLOCK()
+#endif
+
 static PID rollPID(
     KP_ROLL,
     KI_ROLL,
@@ -62,7 +74,7 @@ void calibrateBodyPose()
     for(int i = 0; i < samples; i++)
     {
         imuUpdate(CONTROL_DT);
-        const ImuState& imu = imuGetState();
+        ImuState imu = imuGetState();
 
         rollSum += imu.rollDeg;
         pitchSum += imu.pitchDeg;
@@ -88,9 +100,44 @@ void stabilizationInit()
     calibrateBodyPose();
 }
 
+void stabilizationSetConfig(float kpRoll,
+                            float kiRoll,
+                            float kdRoll,
+                            float kpPitch,
+                            float kiPitch,
+                            float kdPitch,
+                            float rollDeadband,
+                            float pitchDeadband,
+                            float maxRollCorr,
+                            float maxPitchCorr)
+{
+    STABILIZATION_LOCK();
+
+    KP_ROLL = kpRoll;
+    KI_ROLL = kiRoll;
+    KD_ROLL = kdRoll;
+
+    KP_PITCH = kpPitch;
+    KI_PITCH = kiPitch;
+    KD_PITCH = kdPitch;
+
+    ROLL_DEADBAND = rollDeadband;
+    PITCH_DEADBAND = pitchDeadband;
+    MAX_ROLL_CORR = maxRollCorr;
+    MAX_PITCH_CORR = maxPitchCorr;
+
+    rollPID.setTunings(KP_ROLL, KI_ROLL, KD_ROLL);
+    pitchPID.setTunings(KP_PITCH, KI_PITCH, KD_PITCH);
+
+    rollPID.reset();
+    pitchPID.reset();
+
+    STABILIZATION_UNLOCK();
+}
+
 void updateBodyCompensation()
 {
-    const ImuState& imu = imuGetState();
+    ImuState imu = imuGetState();
     
     DEBUG_PRINT("Roll: ");
     DEBUG_PRINT(imu.rollDeg);
@@ -108,15 +155,19 @@ void updateBodyCompensation()
     if(fabs(pitchSetpoint - pitchMeasurement) < PITCH_DEADBAND)
     pitchMeasurement = pitchSetpoint;
 
+    STABILIZATION_LOCK();
+
     float rollCorr = rollPID.update(
-    rollSetpoint,
-    rollMeasurement,
-    CONTROL_DT);
+        rollSetpoint,
+        rollMeasurement,
+        CONTROL_DT);
 
     float pitchCorr = pitchPID.update(
-    pitchSetpoint,
-    pitchMeasurement,
-    CONTROL_DT);
+        pitchSetpoint,
+        pitchMeasurement,
+        CONTROL_DT);
+
+    STABILIZATION_UNLOCK();
 
     rollCorr = constrain(
     rollCorr,

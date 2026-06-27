@@ -13,8 +13,8 @@ constexpr float SHOULDER_LENGTH = 3.5f;   // Offset from hip pivot to shoulder s
 constexpr float SHOULDER_WIDTH = 4.1f; // Offset from shoulder pivot to upper leg pivot (cm)(Ry)
 constexpr float UPPER_LEG_LENGTH = 10.0f; // Length of upper leg (hip → knee) in cm
 constexpr float LOWER_LEG_LENGTH = 10.0f; // Length of lower leg (knee → foot) in cm
-constexpr float FRONT_X_BIAS = 5.0f;
-constexpr float REAR_X_BIAS = -1.0f;
+constexpr float FRONT_X_BIAS = 0.0f; //5
+constexpr float REAR_X_BIAS = 0.0f; //-1
 
 //========================================PID parameters========================================
 extern float ROLL_DEADBAND ;  // degrees
@@ -38,12 +38,14 @@ extern float STEP_HEIGHT;
 extern float ROLL_COMP;  
 extern float BODY_SHIFT_Y;
 extern float BODY_SHIFT_X;
+extern float BODY_X_TRIM;
 extern float BODY_SHIFT_GAIN;
 extern float SHIFT_SMOOTHING;
 extern float GAIT_CYCLE_DURATION;  // seconds per full gait cycle
 // Gait timing
 constexpr float SWING_PORTION = 0.20f;
 constexpr float STANCE_PORTION = 0.80f;
+constexpr float GAIT_START_PHASE = SWING_PORTION;
 
 // Swing subdivision
 constexpr float LIFT_END  = 0.20f;

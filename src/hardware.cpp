@@ -5,7 +5,24 @@
 #include "globals.h"
 #include "hardware.h"
 
+#ifdef ESP32
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
+static SemaphoreHandle_t pwmMutex = nullptr;
+#endif
+
+void initHardwareLocks()
+{
+#ifdef ESP32
+  if (pwmMutex == nullptr) {
+    pwmMutex = xSemaphoreCreateMutex();
+    if (pwmMutex == nullptr) {
+      Serial.println("WARNING: Failed to create PWM mutex");
+    }
+  }
+#endif
+}
 
 bool i2cDevicePresent(uint8_t address) {
   Wire.beginTransmission(address);
@@ -17,6 +34,27 @@ int PWM(float angle) {
   int ticks = round(pulse * 4096.0f / PERIOD_MS);
   ticks = constrain(ticks, 0, 4095);
   return ticks;
+}
+
+void writeServoPWM(int servoIndex, float angle)
+{
+  if (servoIndex < 0 || servoIndex > 14) {
+    return;
+  }
+
+  float finalAngle = constrain(angle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+  int ticks = PWM(finalAngle);
+
+#ifdef ESP32
+  if (pwmMutex != nullptr) {
+    xSemaphoreTake(pwmMutex, portMAX_DELAY);
+    pwm.setPWM(servoIndex, 0, ticks);
+    xSemaphoreGive(pwmMutex);
+    return;
+  }
+#endif
+
+  pwm.setPWM(servoIndex, 0, ticks);
 }
 
 void setServoAngleWithOffset(int servoIndex, float angle) {
@@ -39,7 +77,5 @@ void setServoAngleWithOffset(int servoIndex, float angle) {
   }
   
   float finalAngle = angle + offset;
-  finalAngle = constrain(finalAngle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
-  
-  pwm.setPWM(servoIndex, 0, PWM(finalAngle));
+  writeServoPWM(servoIndex, finalAngle);
 }

@@ -21,7 +21,39 @@ const int gaitOrder[4] =
     LEG_FL,
     LEG_BL
 };
-float xBias;
+
+static bool isLeftLeg(int legIndex)
+{
+    return legIndex == LEG_FL || legIndex == LEG_BL;
+}
+
+static bool isFrontLeg(int legIndex)
+{
+    return legIndex == LEG_FR || legIndex == LEG_FL;
+}
+
+static float getLegStrideCommand(int legIndex)
+{
+    float forward = targetForward;
+    float turn = targetTurn;
+    float turnContribution = isLeftLeg(legIndex) ? turn : -turn;
+
+    return constrain(forward + turnContribution, -1.0f, 1.0f);
+}
+
+static void getStrideEndpoints(
+    int legIndex,
+    float &rearX,
+    float &frontX,
+    float &strideLength)
+{
+    float strideCommand = getLegStrideCommand(legIndex);
+    float direction = strideCommand >= 0.0f ? 1.0f : -1.0f;
+
+    strideLength = STEP_LENGTH * fabsf(strideCommand);
+    rearX = X_OFFSET - direction * strideLength * 0.5f;
+    frontX = X_OFFSET + direction * strideLength * 0.5f;
+}
 
 //=====================Body Control Functions======================
 void initializeFootPositions()
@@ -44,26 +76,28 @@ void moveFoot(int legIndex, float x, float y, float z)
 {
     float zComp = 0;
 
-bool isSwingLeg = gaitState.swing[legIndex];
+    bool isSwingLeg = gaitState.swing[legIndex];
 
-if(!isSwingLeg)
-{
-    if(legIndex == LEG_FL || legIndex == LEG_BL)
-        zComp += getRollCompLeft();
-    else
-        zComp += getRollCompRight();
+    if(!isSwingLeg)
+    {
+        if(isLeftLeg(legIndex))
+            zComp += getRollCompLeft();
+        else
+            zComp += getRollCompRight();
 
-    if(legIndex == LEG_FL || legIndex == LEG_FR)
-        zComp += getPitchCompFront();
-    else
-        zComp += getPitchCompRear();
-}
+        if(isFrontLeg(legIndex))
+            zComp += getPitchCompFront();
+        else
+            zComp += getPitchCompRear();
+    }
+
+    float xBias = 0.0f;
     if (legIndex == LEG_FR || legIndex == LEG_FL)
         xBias = FRONT_X_BIAS;
     else 
         xBias = REAR_X_BIAS;
     footPos[legIndex].x =
-    x + xBias + gaitState.bodyShiftX;
+    x + xBias + BODY_X_TRIM + gaitState.bodyShiftX;
 
     footPos[legIndex].y =
     y + gaitState.bodyShiftY;
@@ -105,14 +139,17 @@ void updateGaitState(float phaseTime)
             {
                 lastSwingLeg = i;
 
-                Serial.print("NEW SWING = ");
-
-                switch(i)
+                if(DEBUG_MODE)
                 {
-                    case LEG_FR: Serial.println("FR"); break;
-                    case LEG_FL: Serial.println("FL"); break;
-                    case LEG_BR: Serial.println("BR"); break;
-                    case LEG_BL: Serial.println("BL"); break;
+                    Serial.print("NEW SWING = ");
+
+                    switch(i)
+                    {
+                        case LEG_FR: Serial.println("FR"); break;
+                        case LEG_FL: Serial.println("FL"); break;
+                        case LEG_BR: Serial.println("BR"); break;
+                        case LEG_BL: Serial.println("BL"); break;
+                    }
                 }
             }
 
@@ -156,12 +193,12 @@ void updateSupportShift()
 
         case LEG_BR:
             targetShiftY = +BODY_SHIFT_Y;   // shift left
-            targetShiftX = +BODY_SHIFT_X;             // shift forward
+            targetShiftX = -BODY_SHIFT_X;             // shift forward
             break;
 
         case LEG_BL:
             targetShiftY = -BODY_SHIFT_Y;   // shift right
-            targetShiftX = +BODY_SHIFT_X;             // shift forward
+            targetShiftX = -BODY_SHIFT_X;             // shift forward
             break;
     }
 
@@ -179,7 +216,14 @@ void updateSupportShift()
 
 void cosGait(float phase, LegConfig &leg, int legIndex)
 {
+    (void)leg;
+
     float X, Y, Z;
+    float rearX;
+    float frontX;
+    float strideLength;
+
+    getStrideEndpoints(legIndex, rearX, frontX, strideLength);
 
     // Keep phase in [0,1)
     phase = fmod(phase, 1.0f);
@@ -192,11 +236,11 @@ void cosGait(float phase, LegConfig &leg, int legIndex)
         float t = phase / 0.5f;   // 0 → 1
 
         if (!reverseGait)
-            X = X_OFFSET -STEP_LENGTH/2 + STEP_LENGTH * t;
+            X = rearX + (frontX - rearX) * t;
         else
-            X = X_OFFSET + STEP_LENGTH/2 - STEP_LENGTH * t;
+            X = frontX - (frontX - rearX) * t;
 
-        Z = Z_GROUND + STEP_HEIGHT * cos(X/STEP_LENGTH * PI);
+        Z = Z_GROUND + STEP_HEIGHT * sinf(t * PI);
     }
     else
     {
@@ -206,9 +250,9 @@ void cosGait(float phase, LegConfig &leg, int legIndex)
         float t = (phase - 0.5f) / 0.5f;   // 0 → 1
 
         if (!reverseGait)
-            X = X_OFFSET + STEP_LENGTH/2 - STEP_LENGTH * t;
+            X = frontX - (frontX - rearX) * t;
         else
-            X = X_OFFSET - STEP_LENGTH/2 + STEP_LENGTH * t;
+            X = rearX + (frontX - rearX) * t;
 
         Z = Z_GROUND;
     }
@@ -220,12 +264,25 @@ void cosGait(float phase, LegConfig &leg, int legIndex)
 
 void squareGait(float phase, LegConfig &leg, int legIndex)
 {
+    (void)leg;
+
     float X, Y, Z;
 
-    const float L = STEP_LENGTH;
+    float rearX;
+    float frontX;
+    float L;
+
+    getStrideEndpoints(legIndex, rearX, frontX, L);
+
     const float H = STEP_HEIGHT;
 
     phase = fmod(phase, 1.0f);
+
+    if(L <= 0.001f)
+    {
+        moveFoot(legIndex, X_OFFSET, Y_OFFSET, Z_GROUND);
+        return;
+    }
 
     // ==========================
     // Swing phase
@@ -239,7 +296,7 @@ void squareGait(float phase, LegConfig &leg, int legIndex)
         {
             float s = t / LIFT_END;
 
-            X = X_OFFSET - L/2;
+            X = rearX;
             Z = Z_GROUND + H * s;
         }
 
@@ -249,7 +306,7 @@ void squareGait(float phase, LegConfig &leg, int legIndex)
             float s = (t - LIFT_END) /
                       (SWING_END - LIFT_END);
 
-            X = X_OFFSET - L/2 + L * s;
+            X = rearX + (frontX - rearX) * s;
             Z = Z_GROUND + H;
         }
 
@@ -259,7 +316,7 @@ void squareGait(float phase, LegConfig &leg, int legIndex)
             float s = (t - SWING_END) /
                       (LOWER_END - SWING_END);
 
-            X = X_OFFSET + L/2;
+            X = frontX;
             Z = Z_GROUND + H * (1.0f - s);
         }
     }
@@ -272,7 +329,7 @@ void squareGait(float phase, LegConfig &leg, int legIndex)
         float t = (phase - SWING_PORTION) /
                   STANCE_PORTION;
 
-        X = X_OFFSET + L/2 - L * t;
+        X = frontX - (frontX - rearX) * t;
         Z = Z_GROUND;
     }
 

@@ -5,7 +5,7 @@
 #include "hardware.h"
 #include "servo_control.h"
 
-static float currentServoAngles[15] = {
+float currentServoAngles[15] = {
     90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90};
 
 
@@ -100,8 +100,7 @@ void setServoManual(int servoIndex, float angle) {
   angle = constrain(angle, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
   currentServoAngles[servoIndex] = angle;
 
-  // Apply to PCA9685 with automatic offset compensation
-  pwm.setPWM(servoIndex, 0, PWM(angle));
+  writeServoPWM(servoIndex, angle);
 
   Serial.print("Servo ");
   Serial.print(servoIndex);

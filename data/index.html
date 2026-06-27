@@ -19,12 +19,89 @@
     <button onclick="sendCmd('stand')">Stand</button>
     
     <div class="panel">
-    <h2>Telemetry</h2>
+        <h2>Telemetry</h2>
 
-    <p>Roll: <span id="roll">0</span></p>
-    <p>Pitch: <span id="pitch">0</span></p>
-    <p>Yaw: <span id="yaw">0</span></p>
+        <p>Roll: <span id="roll">0</span></p>
+        <p>Pitch: <span id="pitch">0</span></p>
+        <p>Yaw: <span id="yaw">0</span></p>
     </div>
+
+    <div class="panel">
+        <h2>PID Stabilization</h2>
+
+        <div class="grid">
+            <label>Roll KP
+                <input type="number" id="kp_roll" step="0.01" value="0.10">
+            </label>
+            <label>Roll KI
+                <input type="number" id="ki_roll" step="0.001" value="0.00">
+            </label>
+            <label>Roll KD
+                <input type="number" id="kd_roll" step="0.001" value="0.00">
+            </label>
+
+            <label>Pitch KP
+                <input type="number" id="kp_pitch" step="0.01" value="0.10">
+            </label>
+            <label>Pitch KI
+                <input type="number" id="ki_pitch" step="0.001" value="0.00">
+            </label>
+            <label>Pitch KD
+                <input type="number" id="kd_pitch" step="0.001" value="0.00">
+            </label>
+
+            <label>Roll Deadband
+                <input type="number" id="roll_deadband" step="0.1" value="0.50">
+            </label>
+            <label>Pitch Deadband
+                <input type="number" id="pitch_deadband" step="0.1" value="0.50">
+            </label>
+            <label>Max Roll Corr
+                <input type="number" id="max_roll_corr" step="0.1" value="1.00">
+            </label>
+            <label>Max Pitch Corr
+                <input type="number" id="max_pitch_corr" step="0.1" value="1.00">
+            </label>
+        </div>
+
+        <button onclick="applyPID()">
+            Apply PID
+        </button>
+        <p id="pidStatus">PID not applied yet.</p>
+    </div>
+
+    <div class="panel">
+        <h2>Servo Control</h2>
+
+        <input type="number" id="servoIndex" placeholder="Servo">
+
+        <input type="number" id="servoAngle" placeholder="Angle">
+
+        <button onclick="moveServo()">
+            Move Servo
+        </button>
+    </div>
+
+    <div class="panel">
+        <h2>Leg IK</h2>
+
+        <select id="leg">
+            <option>FR</option>
+            <option>FL</option>
+            <option>BR</option>
+            <option>BL</option>
+        </select>
+
+        <input type="number" id="x" placeholder="X">
+        <input type="number" id="y" placeholder="Y">
+        <input type="number" id="z" placeholder="Z">
+
+        <button onclick="moveLeg()">
+            Move Leg
+        </button>
+    </div>
+
+
 
     <script src="/script.js"></script>
     <script src="/dashboard.js"></script>
